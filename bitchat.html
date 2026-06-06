@@ -262,7 +262,8 @@
             showModalAdd: false,
             showModalConfig: false,
             lastPantalla: null,
-            me: null
+            me: null,
+            solicitudesEnviadasPendientes: new Set() // Session-only retry queue
         };
 
         const DB = {
@@ -485,9 +486,14 @@
             startBackgroundSync() {
                 if(this.syncInterval) clearInterval(this.syncInterval);
                 this.syncInterval = setInterval(async () => {
+                    // 1. Retry secure handshakes for existing contacts with pending messages
                     const pending = await DB.getPendingMessages();
                     const uniqueTargets = [...new Set(pending.map(m => m.chatId))];
                     for(const target of uniqueTargets) {
+                        this.conectarAContacto(target);
+                    }
+                    // 2. Retry session-only connection requests
+                    for(const target of Estado.solicitudesEnviadasPendientes) {
                         this.conectarAContacto(target);
                     }
                 }, 15000);
@@ -496,9 +502,15 @@
             async conectarAContacto(idPublicoAmigo) {
                 const targetAuthId = `bitchat-auth-${idPublicoAmigo}`;
                 const conn = this.peer.connect(targetAuthId);
+                
+                // If this is a new request, add to session retry queue
+                const contactos = BitChatAuth.obtenerContactos();
+                if (!contactos[idPublicoAmigo]) {
+                    Estado.solicitudesEnviadasPendientes.add(idPublicoAmigo);
+                }
+
                 conn.on('open', async () => {
                     const misCreds = await BitChatAuth.obtenerMisCredenciales();
-                    const contactos = BitChatAuth.obtenerContactos();
                     if (contactos[idPublicoAmigo]) {
                         if (!this.conexionesP2PDirectas[idPublicoAmigo] || this.conexionesP2PDirectas[idPublicoAmigo].status !== 'SECURE') {
                              const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
@@ -510,6 +522,13 @@
                         conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico });
                     }
                 });
+                
+                // When we receive data from this peer, it means they are online
+                conn.on('data', () => {
+                    // If they respond, we can stop retrying the request in this session
+                    Estado.solicitudesEnviadasPendientes.delete(idPublicoAmigo);
+                });
+
                 this._procesarEntrante(conn);
             },
 
