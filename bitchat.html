@@ -313,7 +313,7 @@
             lastPantalla: null,
             me: null,
             solicitudesEnviadasPendientes: new Set(),
-            mostrarChatMobile: false // New: Toggle for mobile view
+            mostrarChatMobile: false 
         };
 
         const DB = {
@@ -417,6 +417,23 @@
                         addReq.onsuccess = (e) => resolve(e.target.result);
                     }
                 });
+            },
+            async getAllMessages() {
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction('messages', 'readonly');
+                    const store = tx.objectStore('messages');
+                    const req = store.getAll();
+                    req.onsuccess = () => resolve(req.result);
+                });
+            },
+            async importMessages(messages) {
+                const tx = this.db.transaction('messages', 'readwrite');
+                const store = tx.objectStore('messages');
+                messages.forEach(m => {
+                    delete m.id; 
+                    store.put(m);
+                });
+                return new Promise(r => tx.oncomplete = () => r());
             },
             async updateMessage(id, updates) {
                 return new Promise((resolve) => {
@@ -528,18 +545,25 @@
             syncInterval: null,
 
             async inicializarNodo(idPublico) {
-                const myAuthId = `bitchat-auth-${idPublico}`;
+                let myAuthId = `bitchat-auth-${idPublico}`;
                 if (this.peer) this.peer.destroy();
                 this.peer = new Peer(myAuthId);
-                this.peer.on('open', () => { 
-                    Debug.log("Nodo Online"); 
+                
+                this.peer.on('open', (id) => { 
+                    Debug.log(`Nodo Online: ${id}`);
                     if(this.onRefresh) this.onRefresh(); 
                     this.startBackgroundSync();
                 });
-                this.peer.on('connection', (conn) => this._procesarEntrante(conn));
+
                 this.peer.on('error', (err) => {
+                    if (err.type === 'unavailable-id') {
+                        const suffix = Math.random().toString(36).substring(7);
+                        this.inicializarNodo(`${idPublico}-${suffix}`);
+                    }
                     Debug.log(`Error: ${err.type}`);
                 });
+
+                this.peer.on('connection', (conn) => this._procesarEntrante(conn));
             },
 
             async validarIdentidadEnRed(idPublico, idPrivado, password) {
@@ -647,8 +671,25 @@
                     }
                     if (paquete.tipo === 'MSG_ACK') {
                         await DB.updateMessageByMsgId(paquete.msgId, { status: paquete.read ? 'read' : 'sent' });
-                        const senderId = conn.peer.replace('bitchat-auth-', '');
+                        const senderId = conn.peer.replace('bitchat-auth-', '').split('-')[0];
                         if(this.onMessage) this.onMessage(senderId);
+                    }
+                    if (paquete.tipo === 'SYNC_REQUEST') {
+                        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+                        const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                        if (paquete.cuarta === miCuarta) {
+                            const contactos = BitChatAuth.obtenerContactos();
+                            const mensajes = await DB.getAllMessages();
+                            conn.send({ tipo: 'SYNC_DATA', contactos, mensajes });
+                        }
+                    }
+                    if (paquete.tipo === 'SYNC_DATA') {
+                        const locales = BitChatAuth.obtenerContactos();
+                        const nuevos = { ...locales, ...paquete.contactos };
+                        localStorage.setItem('bitchat_auth_contacts', JSON.stringify(nuevos));
+                        await DB.importMessages(paquete.mensajes);
+                        alert("Sincronización completada con éxito.");
+                        location.reload();
                     }
                 });
             },
@@ -707,6 +748,43 @@
                         setTimeout(() => conn.close(), 1000);
                     });
                 }
+            },
+
+            async iniciarSincronizacion(password) {
+                const misCreds = await BitChatAuth.obtenerMisCredenciales();
+                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, password);
+                
+                return new Promise((resolve) => {
+                    const probeId = `bitchat-sync-probe-${Date.now()}`;
+                    const probePeer = new Peer(probeId);
+                    let foundAny = false;
+
+                    probePeer.on('open', () => {
+                        const targetId = `bitchat-auth-${misCreds.idPublico}`;
+                        const conn = probePeer.connect(targetId);
+                        
+                        const timeout = setTimeout(() => {
+                            if(!foundAny) { probePeer.destroy(); resolve(false); }
+                        }, 8000);
+
+                        conn.on('open', () => {
+                            foundAny = true;
+                            conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta });
+                        });
+
+                        conn.on('data', async (paquete) => {
+                            if(paquete.tipo === 'SYNC_DATA') {
+                                const locales = BitChatAuth.obtenerContactos();
+                                const nuevos = { ...locales, ...paquete.contactos };
+                                localStorage.setItem('bitchat_auth_contacts', JSON.stringify(nuevos));
+                                await DB.importMessages(paquete.mensajes);
+                                probePeer.destroy(); resolve(true);
+                                alert("Sincronización P2P exitosa.");
+                                location.reload();
+                            }
+                        });
+                    });
+                });
             }
         };
 
@@ -775,17 +853,14 @@
                                     const pub = document.getElementById('reg-pub').value;
                                     const priv = document.getElementById('reg-priv').value;
                                     if(!pub || !priv || !pass) return alert("Faltan datos");
-                                    
                                     const btn = document.getElementById('btn-auth-action');
                                     btn.disabled = true; btn.textContent = 'Validando Identidad...';
-                                    
                                     const isValid = await SDK.validarIdentidadEnRed(pub, priv, pass);
                                     if (!isValid) {
                                         Estado.error = "ID ya reclamado con otras credenciales. Usa otro número.";
                                         btn.disabled = false; btn.textContent = 'Generar Identidad';
                                         render(); return;
                                     }
-
                                     await BitChatAuth.guardarMisCredenciales(pub, priv, pass);
                                     Estado.pantalla = 'AUTH_LOGIN'; render();
                                 } else {
@@ -844,10 +919,7 @@
                         h('div', { className: 'glass-card', style: { flex:1, padding:'20px'} }, [
                             h('div', { style:{marginBottom:'16px', borderBottom:'1px solid var(--border)', paddingBottom:'12px', display:'flex', justifyContent:'space-between', alignItems:'center'} }, [
                                 h('div', { style:{display:'flex', alignItems:'center', gap:'10px'} }, [
-                                    h('button', { 
-                                        className: 'btn-back-mobile',
-                                        onClick: () => { Estado.mostrarChatMobile = false; render(); }
-                                    }, '←'),
+                                    h('button', { className: 'btn-back-mobile', onClick: () => { Estado.mostrarChatMobile = false; render(); } }, '←'),
                                     h('h3', { id: 'chat-header' }, 'Seleccione un nodo operativo')
                                 ]),
                                 h('button', { id: 'btn-config', className: 'btn btn-ghost', style: { padding:'4px 8px', display:'none' },
@@ -898,14 +970,29 @@
                             h('h3', { style: { marginBottom:'20px', color:'var(--primary)'} }, 'Configuración de la Terminal'),
                             h('div', { style: { display:'flex', flexDirection:'column', gap:'16px'} }, [
                                 h('p', { style: { fontSize:'14px', color:'var(--text-dim)'} }, '¿Deseas eliminar permanentemente tu cuenta y todos los datos locales? Se borrarán tus credenciales, contactos y todos los mensajes.'),
-                                h('div', { style: { display:'flex', gap:'12px', marginTop:'10px'} }, [
+                                h('div', { style: { marginTop:'20px', borderTop:'1px solid var(--border)', paddingTop:'20px'} }, [
+                                    h('h4', { style:{fontSize:'14px', marginBottom:'10px', color:'var(--accent-blue)'} }, 'Sincronizar Dispositivos'),
+                                    h('p', { style:{fontSize:'12px', color:'var(--text-dim)', marginBottom:'12px'} }, 'Recupera tus contactos y mensajes desde otro dispositivo activo con tu misma ID.'),
+                                    h('div', { style:{display:'flex', flexDirection:'column', gap:'10px'} }, [
+                                        h('input', { type:'password', id:'sync-pass', className:'terminal-input', placeholder:'Confirma tu Contraseña Maestra' }),
+                                        h('button', { id: 'btn-sync-now', className:'btn btn-ghost', 
+                                            onClick: async () => {
+                                                const pass = document.getElementById('sync-pass').value; if(!pass) return alert("Ingresa tu contraseña.");
+                                                const btn = document.getElementById('btn-sync-now'); btn.disabled = true; btn.textContent = 'Buscando dispositivos...';
+                                                const success = await SDK.iniciarSincronizacion(pass);
+                                                if(!success) { alert("No se encontraron dispositivos o contraseña incorrecta."); btn.disabled = false; btn.textContent = 'Intentar de nuevo'; }
+                                            } 
+                                        }, '🔄 Iniciar Sincronización P2P')
+                                    ])
+                                ]),
+                                h('div', { style: { display:'flex', gap:'12px', marginTop:'20px'} }, [
                                     h('button', { className:'btn btn-ghost', style:{flex:1}, onClick:() => { document.getElementById('modal-account').classList.remove('active'); } }, 'Cerrar'),
                                     h('button', { className:'btn btn-primary', style:{flex:1}, onClick: async () => {
                                             if(confirm("¿Estás ABSOLUTAMENTE seguro? Se borrará TODO.")) {
                                                 if(DB.db) DB.db.close();
                                                 const req = indexedDB.deleteDatabase('bitchat_db');
                                                 req.onsuccess = () => { localStorage.clear(); location.reload(); };
-                                                req.onblocked = () => { alert("Por favor, cierra otras pestañas de BitChat para completar el borrado."); };
+                                                req.onblocked = () => { alert("Por favor, cierra otras pestañas de BitChat."); };
                                             }
                                         } 
                                     }, 'Borrar Cuenta')
@@ -944,9 +1031,8 @@
                 return h('div', { 
                     className: `user-card ${Estado.chatConIdPublico === cel ? 'active' : ''}`,
                     onClick: () => { 
-                        Estado.chatConIdPublico = cel; 
-                        Estado.mostrarChatMobile = true; // Switch to chat view on mobile
-                        render(); // Force re-render to apply 'active' classes
+                        Estado.chatConIdPublico = cel; Estado.mostrarChatMobile = true;
+                        render();
                         document.getElementById('chat-header').textContent = `Canal Seguro: ${cel}`;
                         document.getElementById('btn-config').style.display = 'block';
                         loadHistory(cel); updateContactList();
