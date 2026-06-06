@@ -742,13 +742,18 @@
                                     h('button', { className:'btn btn-ghost', style:{flex:1}, onClick:() => { document.getElementById('modal-account').classList.remove('active'); } }, 'Cerrar'),
                                     h('button', { className:'btn btn-primary', style:{flex:1}, onClick: async () => {
                                             if(confirm("¿Estás ABSOLUTAMENTE seguro? Se borrará TODO.")) {
-                                                // 1. Wipe DB
+                                                // 1. Close active connection to allow deletion
+                                                if(DB.db) DB.db.close();
+                                                // 2. Wipe DB
                                                 const req = indexedDB.deleteDatabase('bitchat_db');
                                                 req.onsuccess = () => {
-                                                    // 2. Wipe LocalStorage
+                                                    // 3. Wipe LocalStorage
                                                     localStorage.clear();
-                                                    // 3. Reset UI & App
+                                                    // 4. Force reload to return to registration (AUTH)
                                                     location.reload();
+                                                };
+                                                req.onblocked = () => {
+                                                    alert("Por favor, cierra otras pestañas de BitChat para completar el borrado.");
                                                 };
                                             }
                                         } 
