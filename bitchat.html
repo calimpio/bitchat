@@ -221,6 +221,7 @@
         }
         .status-online { color: var(--success); background: rgba(16, 185, 129, 0.1); }
         .status-offline { color: var(--text-dim); background: rgba(148, 163, 184, 0.1); }
+        .status-insecure { color: var(--primary); background: rgba(225, 29, 72, 0.1); border: 1px solid var(--primary); }
 
         .modal-overlay {
             position: fixed;
@@ -263,7 +264,7 @@
             showModalConfig: false,
             lastPantalla: null,
             me: null,
-            solicitudesEnviadasPendientes: new Set() // Session-only retry queue
+            solicitudesEnviadasPendientes: new Set() 
         };
 
         const DB = {
@@ -458,10 +459,17 @@
             obtenerContactos() {
                 return JSON.parse(localStorage.getItem('bitchat_auth_contacts')) || {}; 
             },
-            guardarContacto(idPublico, tokenCuartaCredencial) {
+            guardarContacto(idPublico, tokenCuartaCredencial, insecure = false) {
                 const contactos = this.obtenerContactos();
-                contactos[idPublico] = { tokenCuartaCredencial };
+                contactos[idPublico] = { tokenCuartaCredencial, insecure };
                 localStorage.setItem('bitchat_auth_contacts', JSON.stringify(contactos));
+            },
+            marcarContactoInseguro(idPublico) {
+                const contactos = this.obtenerContactos();
+                if (contactos[idPublico]) {
+                    contactos[idPublico].insecure = true;
+                    localStorage.setItem('bitchat_auth_contacts', JSON.stringify(contactos));
+                }
             }
         };
 
@@ -480,34 +488,50 @@
                     this.startBackgroundSync();
                 });
                 this.peer.on('connection', (conn) => this._procesarEntrante(conn));
-                this.peer.on('error', (err) => Debug.log(`Error: ${err.type}`));
+                this.peer.on('error', (err) => {
+                    Debug.log(`Error: ${err.type}`);
+                });
+            },
+
+            async validarIdentidadEnRed(idPublico, idPrivado, password) {
+                return new Promise(async (resolve) => {
+                    const probeId = `bitchat-probe-${Date.now()}`;
+                    const probePeer = new Peer(probeId);
+                    const miCuarta = await generarCuartaCredencial(idPublico, idPrivado, password);
+                    let foundExisting = false;
+                    
+                    probePeer.on('open', () => {
+                        const conn = probePeer.connect(`bitchat-auth-${idPublico}`);
+                        const timeout = setTimeout(() => { if (!foundExisting) { probePeer.destroy(); resolve(true); } }, 5000);
+
+                        conn.on('open', () => {
+                            foundExisting = true; clearTimeout(timeout);
+                            conn.send({ tipo: 'IDENTITY_PROBE', deIdPublico: idPublico, cuarta: miCuarta });
+                        });
+                        conn.on('data', (paquete) => {
+                            if (paquete.tipo === 'IDENTITY_CONFLICT') { probePeer.destroy(); resolve(false); }
+                            if (paquete.tipo === 'IDENTITY_MATCH') { probePeer.destroy(); resolve(true); }
+                        });
+                        conn.on('error', () => { probePeer.destroy(); resolve(true); });
+                    });
+                });
             },
 
             startBackgroundSync() {
                 if(this.syncInterval) clearInterval(this.syncInterval);
                 this.syncInterval = setInterval(async () => {
-                    // 1. Retry secure handshakes for existing contacts with pending messages
                     const pending = await DB.getPendingMessages();
                     const uniqueTargets = [...new Set(pending.map(m => m.chatId))];
-                    for(const target of uniqueTargets) {
-                        this.conectarAContacto(target);
-                    }
-                    // 2. Retry session-only connection requests
-                    for(const target of Estado.solicitudesEnviadasPendientes) {
-                        this.conectarAContacto(target);
-                    }
+                    for(const target of uniqueTargets) { this.conectarAContacto(target); }
+                    for(const target of Estado.solicitudesEnviadasPendientes) { this.conectarAContacto(target); }
                 }, 15000);
             },
 
             async conectarAContacto(idPublicoAmigo) {
                 const targetAuthId = `bitchat-auth-${idPublicoAmigo}`;
                 const conn = this.peer.connect(targetAuthId);
-                
-                // If this is a new request, add to session retry queue
                 const contactos = BitChatAuth.obtenerContactos();
-                if (!contactos[idPublicoAmigo]) {
-                    Estado.solicitudesEnviadasPendientes.add(idPublicoAmigo);
-                }
+                if (!contactos[idPublicoAmigo]) { Estado.solicitudesEnviadasPendientes.add(idPublicoAmigo); }
 
                 conn.on('open', async () => {
                     const misCreds = await BitChatAuth.obtenerMisCredenciales();
@@ -515,26 +539,30 @@
                         if (!this.conexionesP2PDirectas[idPublicoAmigo] || this.conexionesP2PDirectas[idPublicoAmigo].status !== 'SECURE') {
                              const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
                              conn.send({ tipo: 'HANDSHAKE_START', miIdPublico: misCreds.idPublico, cuartaCredencial: miCuarta });
-                        } else {
-                            this._enviarPendientes(idPublicoAmigo, conn);
-                        }
-                    } else {
-                        conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico });
-                    }
+                        } else { this._enviarPendientes(idPublicoAmigo, conn); }
+                    } else { conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico }); }
                 });
-                
-                // When we receive data from this peer, it means they are online
-                conn.on('data', () => {
-                    // If they respond, we can stop retrying the request in this session
-                    Estado.solicitudesEnviadasPendientes.delete(idPublicoAmigo);
-                });
-
+                conn.on('data', () => { Estado.solicitudesEnviadasPendientes.delete(idPublicoAmigo); });
                 this._procesarEntrante(conn);
             },
 
             _procesarEntrante(conn) {
                 conn.on('data', async (paquete) => {
                     Debug.log(`Recibido: ${paquete.tipo} de ${paquete.miIdPublico || paquete.deIdPublico}`);
+                    if (paquete.tipo === 'IDENTITY_PROBE') {
+                        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+                        const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                        if (paquete.cuarta === miCuarta) { conn.send({ tipo: 'IDENTITY_MATCH' }); } 
+                        else {
+                            conn.send({ tipo: 'IDENTITY_CONFLICT' });
+                            this._alertarContactosDeIntentoDeSecuestro(misCreds.idPublico);
+                        }
+                    }
+                    if (paquete.tipo === 'SECURITY_ALERT') {
+                        BitChatAuth.marcarContactoInseguro(paquete.idComprometido);
+                        if(this.onRefresh) this.onRefresh();
+                        alert(`¡ALERTA DE SEGURIDAD! El contacto ${paquete.idComprometido} ha reportado un intento de suplantación de identidad.`);
+                    }
                     if (paquete.tipo === 'CONNECTION_REQ') {
                         await DB.addRequest({ idPublico: paquete.deIdPublico, time: Date.now() });
                         if(this.onRefresh) this.onRefresh();
@@ -574,6 +602,18 @@
                         if(this.onMessage) this.onMessage(senderId);
                     }
                 });
+            },
+
+            async _alertarContactosDeIntentoDeSecuestro(miIdComprometido) {
+                const contactos = BitChatAuth.obtenerContactos();
+                for (const idAmigo in contactos) {
+                    const targetAuthId = `bitchat-auth-${idAmigo}`;
+                    const conn = this.peer.connect(targetAuthId);
+                    conn.on('open', () => {
+                        conn.send({ tipo: 'SECURITY_ALERT', idComprometido: miIdComprometido });
+                        setTimeout(() => conn.close(), 2000);
+                    });
+                }
             },
 
             async _establecerCanalSeguro(idAmigo, miCuarta, suCuarta) {
@@ -621,7 +661,6 @@
             }
         };
 
-        // Add helper for msgId updates
         DB.updateMessageByMsgId = async function(msgId, updates) {
             return new Promise((resolve) => {
                 const tx = this.db.transaction('messages', 'readwrite');
@@ -680,12 +719,24 @@
                         Estado.error ? h('p', { style: { color:'var(--primary)', fontSize:'12px', textAlign:'center'} }, Estado.error) : null,
                         h('button', { 
                             className: isLogin ? 'btn btn-success' : 'btn btn-primary',
+                            id: 'btn-auth-action',
                             onClick: async () => {
                                 const pass = document.getElementById('login-pass').value;
                                 if(!isLogin) {
                                     const pub = document.getElementById('reg-pub').value;
                                     const priv = document.getElementById('reg-priv').value;
                                     if(!pub || !priv || !pass) return alert("Faltan datos");
+                                    
+                                    const btn = document.getElementById('btn-auth-action');
+                                    btn.disabled = true; btn.textContent = 'Validando Identidad...';
+                                    
+                                    const isValid = await SDK.validarIdentidadEnRed(pub, priv, pass);
+                                    if (!isValid) {
+                                        Estado.error = "ID ya reclamado con otras credenciales. Usa otro número.";
+                                        btn.disabled = false; btn.textContent = 'Generar Identidad';
+                                        render(); return;
+                                    }
+
                                     await BitChatAuth.guardarMisCredenciales(pub, priv, pass);
                                     Estado.pantalla = 'AUTH_LOGIN'; render();
                                 } else {
@@ -744,21 +795,16 @@
                         h('div', { className: 'glass-card', style: { flex:1, padding:'20px'} }, [
                             h('div', { style:{marginBottom:'16px', borderBottom:'1px solid var(--border)', paddingBottom:'12px', display:'flex', justifyContent:'space-between', alignItems:'center'} }, [
                                 h('h3', { id: 'chat-header' }, 'Seleccione un nodo operativo'),
-                                h('button', { 
-                                    id: 'btn-config',
-                                    className: 'btn btn-ghost', 
-                                    style: { padding:'4px 8px', display:'none' },
+                                h('button', { id: 'btn-config', className: 'btn btn-ghost', style: { padding:'4px 8px', display:'none' },
                                     onClick: () => document.getElementById('modal-config').classList.add('active')
                                 }, '⚙')
                             ]),
                             h('div', { id: 'chat-flow', style:{flex:1, overflowY:'auto', display:'flex', flexDirection:'column'} }),
                             h('div', { style:{marginTop:'20px', display:'flex', gap:'12px'} }, [
                                 h('input', { id:'f-msg', className:'terminal-input', style:{flex:1}, placeholder:'Escribir comando de mensaje...' }),
-                                h('button', { 
-                                    className:'btn btn-success', id: 'btn-send',
+                                h('button', { className:'btn btn-success', id: 'btn-send',
                                     onClick: async () => {
-                                        const el = document.getElementById('f-msg');
-                                        const txt = el.value.trim();
+                                        const el = document.getElementById('f-msg'); const txt = el.value.trim();
                                         if(!txt || !Estado.chatConIdPublico) return;
                                         await SDK.enviarMensaje(Estado.chatConIdPublico, txt);
                                         el.value = ''; loadHistory(Estado.chatConIdPublico);
@@ -767,7 +813,6 @@
                             ])
                         ])
                     ]);
-
                     const modalConfig = h('div', { id:'modal-config', className: 'modal-overlay' }, [
                         h('div', { className: 'glass-card modal-content', style: { padding:'30px'} }, [
                             h('h3', { style: { marginBottom:'20px', color:'var(--primary)'} }, 'Configuración del Canal'),
@@ -777,10 +822,8 @@
                                     h('button', { className:'btn btn-ghost', style:{flex:1}, onClick:() => { document.getElementById('modal-config').classList.remove('active'); } }, 'Cerrar'),
                                     h('button', { className:'btn btn-primary', style:{flex:1}, onClick: async () => {
                                             if(Estado.chatConIdPublico) {
-                                                const id = Estado.chatConIdPublico;
-                                                await DB.deleteChat(id);
-                                                const contactos = BitChatAuth.obtenerContactos();
-                                                delete contactos[id];
+                                                const id = Estado.chatConIdPublico; await DB.deleteChat(id);
+                                                const contactos = BitChatAuth.obtenerContactos(); delete contactos[id];
                                                 localStorage.setItem('bitchat_auth_contacts', JSON.stringify(contactos));
                                                 Estado.chatConIdPublico = null;
                                                 document.getElementById('modal-config').classList.remove('active');
@@ -795,7 +838,6 @@
                             ])
                         ])
                     ]);
-
                     const modalAccount = h('div', { id:'modal-account', className: 'modal-overlay' }, [
                         h('div', { className: 'glass-card modal-content', style: { padding:'30px'} }, [
                             h('h3', { style: { marginBottom:'20px', color:'var(--primary)'} }, 'Configuración de la Terminal'),
@@ -807,13 +849,8 @@
                                             if(confirm("¿Estás ABSOLUTAMENTE seguro? Se borrará TODO.")) {
                                                 if(DB.db) DB.db.close();
                                                 const req = indexedDB.deleteDatabase('bitchat_db');
-                                                req.onsuccess = () => {
-                                                    localStorage.clear();
-                                                    location.reload();
-                                                };
-                                                req.onblocked = () => {
-                                                    alert("Por favor, cierra otras pestañas de BitChat para completar el borrado.");
-                                                };
+                                                req.onsuccess = () => { localStorage.clear(); location.reload(); };
+                                                req.onblocked = () => { alert("Por favor, cierra otras pestañas de BitChat para completar el borrado."); };
                                             }
                                         } 
                                     }, 'Borrar Cuenta')
@@ -821,11 +858,9 @@
                             ])
                         ])
                     ]);
-
                     root.replaceChildren(h('div', { className: 'app-container fade-in' }, [modal, modalConfig, modalAccount, header, h('div', { className: 'main-content' }, [sidebar, chatArea])]));
                 }
-                updateContactList();
-                Estado.lastPantalla = 'DASHBOARD';
+                updateContactList(); Estado.lastPantalla = 'DASHBOARD';
             }
         }
 
@@ -850,20 +885,21 @@
             const misContactos = BitChatAuth.obtenerContactos();
             const items = Object.keys(misContactos).map(cel => {
                 const isSecure = SDK.conexionesP2PDirectas[cel]?.status === 'SECURE';
+                const c = misContactos[cel];
                 return h('div', { 
                     className: `user-card ${Estado.chatConIdPublico === cel ? 'active' : ''}`,
                     onClick: () => { 
                         Estado.chatConIdPublico = cel; 
                         document.getElementById('chat-header').textContent = `Canal Seguro: ${cel}`;
                         document.getElementById('btn-config').style.display = 'block';
-                        loadHistory(cel);
-                        updateContactList();
+                        loadHistory(cel); updateContactList();
                     }
                 }, [
                     h('div', {}, [
-                        h('p', { style:{fontWeight:'700', fontSize:'14px'} }, cel)
+                        h('p', { style:{fontWeight:'700', fontSize:'14px', color: c.insecure ? 'var(--primary)' : 'inherit'} }, cel),
+                        c.insecure ? h('p', { style:{fontSize:'10px', color:'var(--primary)'} }, 'SUPLANTACIÓN DETECTADA') : null
                     ]),
-                    h('span', { className: `status-badge ${isSecure ? 'status-online' : 'status-offline'}` }, isSecure ? 'SECURE' : 'LINK')
+                    h('span', { className: `status-badge ${c.insecure ? 'status-insecure' : (isSecure ? 'status-online' : 'status-offline')}` }, c.insecure ? 'INSECURE' : (isSecure ? 'SECURE' : 'LINK'))
                 ]);
             });
             list.replaceChildren(...items);
