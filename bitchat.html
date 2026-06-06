@@ -88,7 +88,31 @@
         .btn-success { background: var(--success); box-shadow: 0 4px 12px var(--success-glow); }
         .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
         .btn-ghost:hover { border-color: var(--text-dim); color: var(--text-main); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        .notification-badge {
+            background: var(--primary);
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 10px;
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            border: 2px solid var(--card-bg);
+        }
+
+        .request-card {
+            background: var(--input-bg);
+            border: 1px solid var(--accent-blue);
+            padding: 12px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
 
         .app-container {
             width: 100vw;
@@ -246,7 +270,7 @@
             db: null,
             init() {
                 return new Promise((resolve) => {
-                    const req = indexedDB.open('bitchat_db', 3);
+                    const req = indexedDB.open('bitchat_db', 4); // Increment version
                     req.onupgradeneeded = (e) => {
                         const db = e.target.result;
                         if (!db.objectStoreNames.contains('messages')) {
@@ -257,8 +281,33 @@
                         if (!db.objectStoreNames.contains('credentials')) {
                             db.createObjectStore('credentials', { keyPath: 'id' });
                         }
+                        if (!db.objectStoreNames.contains('requests')) {
+                            db.createObjectStore('requests', { keyPath: 'idPublico' });
+                        }
                     };
                     req.onsuccess = (e) => { this.db = e.target.result; resolve(); };
+                });
+            },
+            async addRequest(req) {
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction('requests', 'readwrite');
+                    const store = tx.objectStore('requests');
+                    store.put(req).onsuccess = () => resolve();
+                });
+            },
+            async getRequests() {
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction('requests', 'readonly');
+                    const store = tx.objectStore('requests');
+                    const req = store.getAll();
+                    req.onsuccess = () => resolve(req.result);
+                });
+            },
+            async deleteRequest(idPublico) {
+                return new Promise((resolve) => {
+                    const tx = this.db.transaction('requests', 'readwrite');
+                    const store = tx.objectStore('requests');
+                    store.delete(idPublico).onsuccess = () => resolve();
                 });
             },
             async setCreds(creds) {
@@ -270,6 +319,7 @@
             },
             async getCreds() {
                 return new Promise((resolve) => {
+                    if (!this.db) return resolve(null);
                     const tx = this.db.transaction('credentials', 'readonly');
                     const store = tx.objectStore('credentials');
                     const req = store.get('me');
@@ -406,26 +456,32 @@
                     const pending = await DB.getPendingMessages();
                     const uniqueTargets = [...new Set(pending.map(m => m.chatId))];
                     for(const target of uniqueTargets) {
-                        this.conectarAContacto(target, Estado.masterPassword);
+                        this.conectarAContacto(target);
                     }
                 }, 15000);
             },
 
-            async conectarAContacto(idPublicoAmigo, password) {
+            async conectarAContacto(idPublicoAmigo) {
                 const targetAuthId = `bitchat-auth-${idPublicoAmigo}`;
                 const conn = this.peer.connect(targetAuthId);
                 conn.on('open', async () => {
                     const misCreds = await BitChatAuth.obtenerMisCredenciales();
-                    const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, password);
-                    conn.send({ tipo: 'HANDSHAKE_REQ', miIdPublico: misCreds.idPublico, miIdPrivado: misCreds.idPrivado, cuartaCredencial: miCuarta });
+                    conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico });
                 });
                 conn.on('data', async (paquete) => {
-                    if (paquete.tipo === 'HANDSHAKE_OK') {
+                    if (paquete.tipo === 'CONNECTION_ACCEPTED') {
                         const misCreds = await BitChatAuth.obtenerMisCredenciales();
-                        const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, password);
+                        const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                        conn.send({ tipo: 'HANDSHAKE_START', miIdPublico: misCreds.idPublico, miNick: misCreds.idPrivado, cuartaCredencial: miCuarta });
+                    }
+                    if (paquete.tipo === 'HANDSHAKE_FINAL') {
+                        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+                        const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                        BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.miNick, paquete.cuartaCredencialAmigo);
                         const quintaId = await generarQuintaId(miCuarta, paquete.cuartaCredencialAmigo);
                         const finalChannelId = `bitchat-safe-${[misCreds.idPublico, idPublicoAmigo].sort().join('')}-${quintaId}`;
                         this.conexionesP2PDirectas[idPublicoAmigo] = { channelId: finalChannelId, status: 'SECURE' };
+                        
                         const pending = await DB.getPendingMessages();
                         for(const m of pending) {
                             if(m.chatId === idPublicoAmigo) {
@@ -444,16 +500,15 @@
 
             _procesarEntrante(conn) {
                 conn.on('data', async (paquete) => {
-                    if (paquete.tipo === 'HANDSHAKE_REQ') {
-                        const contactos = BitChatAuth.obtenerContactos();
-                        const existente = contactos[paquete.miIdPublico];
-                        if (existente && existente.tokenCuartaCredencial !== paquete.cuartaCredencial) {
-                            conn.send({ tipo: 'HANDSHAKE_REJECTED' }); conn.close(); return;
-                        }
-                        if (!existente) BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.miIdPrivado, paquete.cuartaCredencial);
+                    if (paquete.tipo === 'CONNECTION_REQ') {
+                        await DB.addRequest({ idPublico: paquete.deIdPublico, time: Date.now() });
+                        if(this.onRefresh) this.onRefresh();
+                    }
+                    if (paquete.tipo === 'HANDSHAKE_START') {
                         const misCreds = await BitChatAuth.obtenerMisCredenciales();
                         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
-                        conn.send({ tipo: 'HANDSHAKE_OK', cuartaCredencialAmigo: miCuarta });
+                        BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.miNick, paquete.cuartaCredencial);
+                        conn.send({ tipo: 'HANDSHAKE_FINAL', miIdPublico: misCreds.idPublico, miNick: misCreds.idPrivado, cuartaCredencialAmigo: miCuarta });
                         const quintaId = await generarQuintaId(miCuarta, paquete.cuartaCredencial);
                         const finalChannelId = `bitchat-safe-${[misCreds.idPublico, paquete.miIdPublico].sort().join('')}-${quintaId}`;
                         this.conexionesP2PDirectas[paquete.miIdPublico] = { channelId: finalChannelId, status: 'SECURE' };
@@ -469,6 +524,16 @@
                         if(this.onMessage) this.onMessage(paquete.miIdPublico);
                     }
                 });
+            },
+
+            async aceptarConexion(idPublicoAmigo) {
+                const targetAuthId = `bitchat-auth-${idPublicoAmigo}`;
+                const conn = this.peer.connect(targetAuthId);
+                conn.on('open', () => {
+                    conn.send({ tipo: 'CONNECTION_ACCEPTED' });
+                });
+                await DB.deleteRequest(idPublicoAmigo);
+                if(this.onRefresh) this.onRefresh();
             },
 
             async enviarMensaje(idPublicoAmigo, texto) {
@@ -514,7 +579,6 @@
         async function render() {
             const root = document.getElementById('root');
             const misCreds = await BitChatAuth.obtenerMisCredenciales();
-            const misContactos = BitChatAuth.obtenerContactos();
 
             if (Estado.pantalla === 'AUTH' || Estado.pantalla === 'AUTH_LOGIN') {
                 const isLogin = (Estado.pantalla === 'AUTH_LOGIN');
@@ -566,7 +630,7 @@
                                     h('button', { className:'btn btn-ghost', style:{flex:1}, onClick:() => { document.getElementById('modal-add').classList.remove('active'); } }, 'Cancelar'),
                                     h('button', { className:'btn btn-primary', style:{flex:1}, onClick:() => {
                                             const id = document.getElementById('modal-add-id').value.trim();
-                                            if(id) { SDK.conectarAContacto(id, Estado.masterPassword); document.getElementById('modal-add').classList.remove('active'); updateContactList(); }
+                                            if(id) { SDK.conectarAContacto(id); document.getElementById('modal-add').classList.remove('active'); updateContactList(); }
                                         } 
                                     }, 'Enlazar')
                                 ])
@@ -583,7 +647,12 @@
                     ]);
                     const sidebar = h('div', { className: 'sidebar' }, [
                         h('button', { className:'btn btn-primary', onClick:() => document.getElementById('modal-add').classList.add('active') }, '+ Añadir Nodo'),
-                        h('div', { id: 'contact-list', style: { display:'flex', flexDirection:'column', gap:'8px', overflowY:'auto'} })
+                        h('div', { id: 'request-section', style: { display:'none', flexDirection:'column', gap:'8px'} }, [
+                            h('h4', { style:{fontSize:'12px', color:'var(--primary)', marginTop:'10px'} }, 'Solicitudes Pendientes'),
+                            h('div', { id: 'request-list' })
+                        ]),
+                        h('h4', { style:{fontSize:'12px', color:'var(--text-dim)', marginTop:'10px'} }, 'Contactos'),
+                        h('div', { id: 'contact-list', style: { display:'flex', flexDirection:'column', gap:'8px', overflowY:'auto', flex:1} })
                     ]);
                     const chatArea = h('div', { className: 'chat-area' }, [
                         h('div', { className: 'glass-card', style: { flex:1, padding:'20px'} }, [
@@ -613,9 +682,28 @@
             }
         }
 
-        function updateContactList() {
+        async function updateContactList() {
             const list = document.getElementById('contact-list');
-            if (!list) return;
+            const reqList = document.getElementById('request-list');
+            const reqSection = document.getElementById('request-section');
+            if (!list || !reqList) return;
+
+            // Requests
+            const requests = await DB.getRequests();
+            if(requests.length > 0) {
+                reqSection.style.display = 'flex';
+                reqList.replaceChildren(...requests.map(r => h('div', { className:'request-card' }, [
+                    h('p', { style:{fontSize:'12px'} }, `Nodo: ${r.idPublico}`),
+                    h('div', { style:{display:'flex', gap:'8px'} }, [
+                        h('button', { className:'btn btn-success btn-sm', onClick: () => SDK.aceptarConexion(r.idPublico) }, 'Aceptar'),
+                        h('button', { className:'btn btn-ghost btn-sm', onClick: () => { DB.deleteRequest(r.idPublico); updateContactList(); } }, 'X')
+                    ])
+                ])));
+            } else {
+                reqSection.style.display = 'none';
+            }
+
+            // Contacts
             const misContactos = BitChatAuth.obtenerContactos();
             const items = Object.keys(misContactos).map(cel => {
                 const isSecure = SDK.conexionesP2PDirectas[cel]?.status === 'SECURE';
