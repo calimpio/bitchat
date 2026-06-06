@@ -483,54 +483,53 @@
                 const conn = this.peer.connect(targetAuthId);
                 conn.on('open', async () => {
                     const misCreds = await BitChatAuth.obtenerMisCredenciales();
-                    conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico });
+                    const contactos = BitChatAuth.obtenerContactos();
+                    if (contactos[idPublicoAmigo]) {
+                        if (!this.conexionesP2PDirectas[idPublicoAmigo] || this.conexionesP2PDirectas[idPublicoAmigo].status !== 'SECURE') {
+                             const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                             conn.send({ tipo: 'HANDSHAKE_START', miIdPublico: misCreds.idPublico, cuartaCredencial: miCuarta });
+                        } else {
+                            this._enviarPendientes(idPublicoAmigo, conn);
+                        }
+                    } else {
+                        conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico });
+                    }
                 });
+                this._procesarEntrante(conn);
+            },
+
+            _procesarEntrante(conn) {
                 conn.on('data', async (paquete) => {
+                    Debug.log(`Recibido: ${paquete.tipo} de ${paquete.miIdPublico || paquete.deIdPublico}`);
+                    
+                    if (paquete.tipo === 'CONNECTION_REQ') {
+                        await DB.addRequest({ idPublico: paquete.deIdPublico, time: Date.now() });
+                        if(this.onRefresh) this.onRefresh();
+                    }
+
                     if (paquete.tipo === 'CONNECTION_ACCEPTED') {
                         const misCreds = await BitChatAuth.obtenerMisCredenciales();
                         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
                         conn.send({ tipo: 'HANDSHAKE_START', miIdPublico: misCreds.idPublico, cuartaCredencial: miCuarta });
                     }
-                    if (paquete.tipo === 'HANDSHAKE_FINAL') {
-                        const misCreds = await BitChatAuth.obtenerMisCredenciales();
-                        const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
-                        BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencialAmigo);
-                        const quintaId = await generarQuintaId(miCuarta, paquete.cuartaCredencialAmigo);
-                        const finalChannelId = `bitchat-safe-${[misCreds.idPublico, idPublicoAmigo].sort().join('')}-${quintaId}`;
-                        this.conexionesP2PDirectas[idPublicoAmigo] = { channelId: finalChannelId, status: 'SECURE' };
-                        
-                        const pending = await DB.getPendingMessages();
-                        for(const m of pending) {
-                            if(m.chatId === idPublicoAmigo) {
-                                conn.send({ tipo: 'MSG', id: m.id, miIdPublico: misCreds.idPublico, channel: finalChannelId, txt: m.msg, time: m.time });
-                            }
-                        }
-                        setTimeout(() => conn.close(), 1000);
-                        if(this.onRefresh) this.onRefresh();
-                    }
-                    if (paquete.tipo === 'MSG_ACK') {
-                        await DB.updateMessage(paquete.msgId, { status: paquete.read ? 'read' : 'sent' });
-                        if(this.onMessage) this.onMessage(idPublicoAmigo);
-                    }
-                });
-            },
 
-            _procesarEntrante(conn) {
-                conn.on('data', async (paquete) => {
-                    if (paquete.tipo === 'CONNECTION_REQ') {
-                        await DB.addRequest({ idPublico: paquete.deIdPublico, time: Date.now() });
-                        if(this.onRefresh) this.onRefresh();
-                    }
                     if (paquete.tipo === 'HANDSHAKE_START') {
                         const misCreds = await BitChatAuth.obtenerMisCredenciales();
                         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
                         BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencial);
                         conn.send({ tipo: 'HANDSHAKE_FINAL', miIdPublico: misCreds.idPublico, cuartaCredencialAmigo: miCuarta });
-                        const quintaId = await generarQuintaId(miCuarta, paquete.cuartaCredencial);
-                        const finalChannelId = `bitchat-safe-${[misCreds.idPublico, paquete.miIdPublico].sort().join('')}-${quintaId}`;
-                        this.conexionesP2PDirectas[paquete.miIdPublico] = { channelId: finalChannelId, status: 'SECURE' };
+                        this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencial);
+                    }
+
+                    if (paquete.tipo === 'HANDSHAKE_FINAL') {
+                        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+                        const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                        BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencialAmigo);
+                        this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencialAmigo);
+                        this._enviarPendientes(paquete.miIdPublico, conn);
                         if(this.onRefresh) this.onRefresh();
                     }
+
                     if (paquete.tipo === 'MSG') {
                         const chatMsg = { 
                             chatId: paquete.miIdPublico, de: paquete.miIdPublico, 
@@ -540,7 +539,33 @@
                         conn.send({ tipo: 'MSG_ACK', msgId: paquete.id, read: true });
                         if(this.onMessage) this.onMessage(paquete.miIdPublico);
                     }
+
+                    if (paquete.tipo === 'MSG_ACK') {
+                        await DB.updateMessage(paquete.msgId, { status: paquete.read ? 'read' : 'sent' });
+                        const senderId = conn.peer.replace('bitchat-auth-', '');
+                        if(this.onMessage) this.onMessage(senderId);
+                    }
                 });
+            },
+
+            async _establecerCanalSeguro(idAmigo, miCuarta, suCuarta) {
+                const misCreds = await BitChatAuth.obtenerMisCredenciales();
+                const quintaId = await generarQuintaId(miCuarta, suCuarta);
+                const finalChannelId = `bitchat-safe-${[misCreds.idPublico, idAmigo].sort().join('')}-${quintaId}`;
+                this.conexionesP2PDirectas[idAmigo] = { channelId: finalChannelId, status: 'SECURE' };
+                if(this.onRefresh) this.onRefresh();
+            },
+
+            async _enviarPendientes(chatId, conn) {
+                const misCreds = await BitChatAuth.obtenerMisCredenciales();
+                const info = this.conexionesP2PDirectas[chatId];
+                if (!info) return;
+                const pending = await DB.getPendingMessages();
+                for(const m of pending) {
+                    if(m.chatId === chatId) {
+                        conn.send({ tipo: 'MSG', id: m.id, miIdPublico: misCreds.idPublico, channel: info.channelId, txt: m.msg, time: m.time });
+                    }
+                }
             },
 
             async aceptarConexion(idPublicoAmigo) {
@@ -549,6 +574,7 @@
                 conn.on('open', () => {
                     conn.send({ tipo: 'CONNECTION_ACCEPTED' });
                 });
+                this._procesarEntrante(conn);
                 await DB.deleteRequest(idPublicoAmigo);
                 if(this.onRefresh) this.onRefresh();
             },
@@ -712,13 +738,10 @@
                                     h('button', { className:'btn btn-primary', style:{flex:1}, onClick: async () => {
                                             if(Estado.chatConIdPublico) {
                                                 const id = Estado.chatConIdPublico;
-                                                // 1. Delete messages from DB
                                                 await DB.deleteChat(id);
-                                                // 2. Remove contact from Auth
                                                 const contactos = BitChatAuth.obtenerContactos();
                                                 delete contactos[id];
                                                 localStorage.setItem('bitchat_auth_contacts', JSON.stringify(contactos));
-                                                // 3. Reset UI
                                                 Estado.chatConIdPublico = null;
                                                 document.getElementById('modal-config').classList.remove('active');
                                                 document.getElementById('chat-header').textContent = 'Seleccione un nodo operativo';
@@ -742,14 +765,10 @@
                                     h('button', { className:'btn btn-ghost', style:{flex:1}, onClick:() => { document.getElementById('modal-account').classList.remove('active'); } }, 'Cerrar'),
                                     h('button', { className:'btn btn-primary', style:{flex:1}, onClick: async () => {
                                             if(confirm("¿Estás ABSOLUTAMENTE seguro? Se borrará TODO.")) {
-                                                // 1. Close active connection to allow deletion
                                                 if(DB.db) DB.db.close();
-                                                // 2. Wipe DB
                                                 const req = indexedDB.deleteDatabase('bitchat_db');
                                                 req.onsuccess = () => {
-                                                    // 3. Wipe LocalStorage
                                                     localStorage.clear();
-                                                    // 4. Force reload to return to registration (AUTH)
                                                     location.reload();
                                                 };
                                                 req.onblocked = () => {
@@ -776,7 +795,6 @@
             const reqSection = document.getElementById('request-section');
             if (!list || !reqList) return;
 
-            // Requests
             const requests = await DB.getRequests();
             if(requests.length > 0) {
                 reqSection.style.display = 'flex';
@@ -791,7 +809,6 @@
                 reqSection.style.display = 'none';
             }
 
-            // Contacts
             const misContactos = BitChatAuth.obtenerContactos();
             const items = Object.keys(misContactos).map(cel => {
                 const isSecure = SDK.conexionesP2PDirectas[cel]?.status === 'SECURE';
