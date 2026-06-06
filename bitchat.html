@@ -28,6 +28,7 @@
             color: var(--text-main); 
             font-family: 'Inter', sans-serif; 
             min-height: 100vh;
+            width: 100vw;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -89,18 +90,6 @@
         .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
         .btn-ghost:hover { border-color: var(--text-dim); color: var(--text-main); }
         
-        .notification-badge {
-            background: var(--primary);
-            color: white;
-            font-size: 10px;
-            padding: 2px 6px;
-            border-radius: 10px;
-            position: absolute;
-            top: -5px;
-            right: -5px;
-            border: 2px solid var(--card-bg);
-        }
-
         .request-card {
             background: var(--input-bg);
             border: 1px solid var(--accent-blue);
@@ -131,6 +120,7 @@
             border-bottom: 1px solid var(--border);
             background: rgba(22, 27, 46, 0.8);
             backdrop-filter: blur(10px);
+            z-index: 100;
         }
 
         .main-content {
@@ -139,6 +129,7 @@
             padding: 24px;
             gap: 24px;
             overflow: hidden;
+            position: relative;
         }
 
         .sidebar {
@@ -226,12 +217,12 @@
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            backdrop-filter: blur(4px);
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 1000;
+            z-index: 5000;
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.3s;
@@ -255,14 +246,15 @@
                 position: fixed;
                 top: 0;
                 left: 0;
-                width: 100vw;
-                height: 100vh;
+                width: 100%;
+                height: 100%;
                 background: var(--bg);
                 z-index: 2000;
                 padding: 10px;
+                flex-direction: column;
             }
             .chat-area.active {
-                display: flex;
+                display: flex !important;
             }
             .main-content {
                 padding: 10px;
@@ -277,11 +269,13 @@
         .btn-back-mobile {
             display: none;
             padding: 8px;
-            font-size: 18px;
+            font-size: 20px;
             background: transparent;
             border: none;
             color: var(--primary);
             cursor: pointer;
+            align-items: center;
+            justify-content: center;
         }
 
     </style>
@@ -813,7 +807,7 @@
                 });
                 flow.replaceChildren(...items);
                 flow.scrollTop = flow.scrollHeight;
-            } else { render(); }
+            }
         }
 
         async function render() {
@@ -858,8 +852,8 @@
                                     if(!(await BitChatAuth.verificarPassword(pass))) { Estado.error = 'Fallo de derivación'; render(); return; }
                                     Estado.masterPassword = pass;
                                     await SDK.inicializarNodo(misCreds.idPublico);
-                                    SDK.onRefresh = () => { if(Estado.chatConIdPublico) loadHistory(Estado.chatConIdPublico); updateContactList(); };
-                                    SDK.onMessage = (chatId) => { if(Estado.chatConIdPublico === chatId) loadHistory(chatId); updateContactList(); };
+                                    SDK.onRefresh = () => { render(); };
+                                    SDK.onMessage = (chatId) => { if(Estado.chatConIdPublico === chatId) loadHistory(chatId); else render(); };
                                     Estado.pantalla = 'DASHBOARD'; render();
                                 }
                             }
@@ -869,174 +863,154 @@
                 root.replaceChildren(h('div', { style: { display:'flex', height:'100vh', width:'100vw', alignItems:'center', justifyContent:'center' } }, [authContent]));
             } 
             else if (Estado.pantalla === 'DASHBOARD') {
-                if (Estado.lastPantalla !== 'DASHBOARD') {
-                    const modal = h('div', { id:'modal-add', className: `modal-overlay ${Estado.showModalAdd ? 'active' : ''}` }, [
-                        h('div', { className: 'glass-card modal-content', style: { padding:'30px'} }, [
-                            h('h3', { style: { marginBottom:'20px', color:'var(--accent-blue)'} }, 'Enlazar Nuevo Nodo'),
-                            h('div', { style: { display:'flex', flexDirection:'column', gap:'16px'} }, [
-                                h('input', { id:'modal-add-id', className:'terminal-input', placeholder:'Número de Celular' }),
-                                h('div', { style: { display:'flex', gap:'12px', marginTop:'10px'} }, [
-                                    h('button', { className:'btn btn-ghost', style:{flex:1}, onClick:() => { document.getElementById('modal-add').classList.remove('active'); } }, 'Cancelar'),
-                                    h('button', { className:'btn btn-primary', style:{flex:1}, onClick:() => {
-                                            const id = document.getElementById('modal-add-id').value.trim();
-                                            if(id) { SDK.conectarAContacto(id); document.getElementById('modal-add').classList.remove('active'); updateContactList(); }
-                                        } 
-                                    }, 'Enlazar')
-                                ])
+                const modalAdd = h('div', { id:'modal-add', className: `modal-overlay ${Estado.showModalAdd ? 'active' : ''}` }, [
+                    h('div', { className: 'glass-card modal-content', style: { padding:'30px'} }, [
+                        h('h3', { style: { marginBottom:'20px', color:'var(--accent-blue)'} }, 'Enlazar Nuevo Nodo'),
+                        h('div', { style: { display:'flex', flexDirection:'column', gap:'16px'} }, [
+                            h('input', { id:'modal-add-id', className:'terminal-input', placeholder:'Número de Celular' }),
+                            h('div', { style: { display:'flex', gap:'12px', marginTop:'10px'} }, [
+                                h('button', { className:'btn btn-ghost', style:{flex:1}, onClick:() => { Estado.showModalAdd = false; render(); } }, 'Cancelar'),
+                                h('button', { className:'btn btn-primary', style:{flex:1}, onClick:() => {
+                                        const id = document.getElementById('modal-add-id').value.trim();
+                                        if(id) { SDK.conectarAContacto(id); Estado.showModalAdd = false; render(); }
+                                    } 
+                                }, 'Enlazar')
                             ])
                         ])
-                    ]);
-                    const header = h('div', { className: 'header' }, [
-                        h('div', { style: { display:'flex', alignItems:'center', gap:'12px'} }, [
-                            h('div', { style: { width:'10px', height:'10px', background:'var(--success)', borderRadius:'50%', boxShadow:'0 0 8px var(--success)'} }),
-                            h('h2', { style: { fontSize:'18px', fontWeight:'700'} }, `@${misCreds.idPrivado}`),
-                            h('span', { style: { fontSize:'12px', color:'var(--text-dim)'} }, `[ID: ${misCreds.idPublico}]`)
-                        ]),
-                        h('div', { style: { display:'flex', gap:'12px' } }, [
-                            h('button', { className:'btn btn-ghost', style:{padding:'6px 12px'}, onClick:() => document.getElementById('modal-account').classList.add('active') }, '⚙ Configuración'),
-                            h('button', { className:'btn btn-ghost', style:{padding:'6px 12px'}, onClick:()=>location.reload() }, 'Cerrar Terminal')
-                        ])
-                    ]);
-                    const sidebar = h('div', { id: 'sidebar', className: `sidebar ${!Estado.mostrarChatMobile ? 'active' : ''}` }, [
-                        h('button', { className:'btn btn-primary', onClick:() => document.getElementById('modal-add').classList.add('active') }, '+ Añadir Nodo'),
-                        h('div', { id: 'request-section', style: { display:'none', flexDirection:'column', gap:'8px'} }, [
-                            h('h4', { style:{fontSize:'12px', color:'var(--primary)', marginTop:'10px'} }, 'Solicitudes Pendientes'),
-                            h('div', { id: 'request-list' })
-                        ]),
-                        h('h4', { style:{fontSize:'12px', color:'var(--text-dim)', marginTop:'10px'} }, 'Contactos'),
-                        h('div', { id: 'contact-list', style: { display:'flex', flexDirection:'column', gap:'8px', overflowY:'auto', flex:1} })
-                    ]);
-                    const chatArea = h('div', { id: 'chat-area', className: `chat-area ${Estado.mostrarChatMobile ? 'active' : ''}` }, [
-                        h('div', { className: 'glass-card', style: { flex:1, padding:'20px'} }, [
-                            h('div', { style:{marginBottom:'16px', borderBottom:'1px solid var(--border)', paddingBottom:'12px', display:'flex', justifyContent:'space-between', alignItems:'center'} }, [
-                                h('div', { style:{display:'flex', alignItems:'center', gap:'10px'} }, [
-                                    h('button', { className: 'btn-back-mobile', onClick: () => { Estado.mostrarChatMobile = false; render(); } }, '←'),
-                                    h('h3', { id: 'chat-header' }, 'Seleccione un nodo operativo')
-                                ]),
-                                h('button', { id: 'btn-config', className: 'btn btn-ghost', style: { padding:'4px 8px', display:'none' },
-                                    onClick: () => document.getElementById('modal-config').classList.add('active')
-                                }, '⚙')
-                            ]),
-                            h('div', { id: 'chat-flow', style:{flex:1, overflowY:'auto', display:'flex', flexDirection:'column'} }),
-                            h('div', { style:{marginTop:'20px', display:'flex', gap:'12px'} }, [
-                                h('input', { id:'f-msg', className:'terminal-input', style:{flex:1}, placeholder:'Escribir comando de mensaje...' }),
-                                h('button', { className:'btn btn-success', id: 'btn-send',
-                                    onClick: async () => {
-                                        const el = document.getElementById('f-msg'); const txt = el.value.trim();
-                                        if(!txt || !Estado.chatConIdPublico) return;
-                                        await SDK.enviarMensaje(Estado.chatConIdPublico, txt);
-                                        el.value = ''; loadHistory(Estado.chatConIdPublico);
-                                    }
-                                }, 'Enviar')
-                            ])
-                        ])
-                    ]);
-                    const modalConfig = h('div', { id:'modal-config', className: 'modal-overlay' }, [
-                        h('div', { className: 'glass-card modal-content', style: { padding:'30px'} }, [
-                            h('h3', { style: { marginBottom:'20px', color:'var(--primary)'} }, 'Configuración del Canal'),
-                            h('div', { style: { display:'flex', flexDirection:'column', gap:'16px'} }, [
-                                h('p', { style: { fontSize:'14px', color:'var(--text-dim)'} }, '¿Estás seguro de que deseas eliminar este chat y todo su historial? Esta acción es irreversible.'),
-                                h('div', { style: { display:'flex', gap:'12px', marginTop:'10px'} }, [
-                                    h('button', { className:'btn btn-ghost', style:{flex:1}, onClick:() => { document.getElementById('modal-config').classList.remove('active'); } }, 'Cerrar'),
-                                    h('button', { className:'btn btn-primary', style:{flex:1}, onClick: async () => {
-                                            if(Estado.chatConIdPublico) {
-                                                const id = Estado.chatConIdPublico; await DB.deleteChat(id);
-                                                const contactos = BitChatAuth.obtenerContactos(); delete contactos[id];
-                                                localStorage.setItem('bitchat_auth_contacts', JSON.stringify(contactos));
-                                                Estado.chatConIdPublico = null;
-                                                document.getElementById('modal-config').classList.remove('active');
-                                                document.getElementById('chat-header').textContent = 'Seleccione un nodo operativo';
-                                                document.getElementById('chat-flow').replaceChildren();
-                                                document.getElementById('btn-config').style.display = 'none';
-                                                updateContactList();
-                                            }
-                                        } 
-                                    }, 'Eliminar Chat')
-                                ])
-                            ])
-                        ])
-                    ]);
-                    const modalAccount = h('div', { id:'modal-account', className: 'modal-overlay' }, [
-                        h('div', { className: 'glass-card modal-content', style: { padding:'30px'} }, [
-                            h('h3', { style: { marginBottom:'20px', color:'var(--primary)'} }, 'Configuración de la Terminal'),
-                            h('div', { style: { display:'flex', flexDirection:'column', gap:'16px'} }, [
-                                h('p', { style: { fontSize:'14px', color:'var(--text-dim)'} }, '¿Deseas eliminar permanentemente tu cuenta y todos los datos locales? Se borrarán tus credenciales, contactos y todos los mensajes.'),
-                                h('div', { style: { marginTop:'20px', borderTop:'1px solid var(--border)', paddingTop:'20px'} }, [
-                                    h('h4', { style:{fontSize:'14px', marginBottom:'10px', color:'var(--accent-blue)'} }, 'Sincronizar Dispositivos'),
-                                    h('p', { style:{fontSize:'12px', color:'var(--text-dim)', marginBottom:'12px'} }, 'Recupera tus contactos y mensajes desde otro dispositivo activo con tu misma ID.'),
-                                    h('div', { style:{display:'flex', flexDirection:'column', gap:'10px'} }, [
-                                        h('input', { type:'password', id:'sync-pass', className:'terminal-input', placeholder:'Confirma tu Contraseña Maestra' }),
-                                        h('button', { id: 'btn-sync-now', className:'btn btn-ghost', 
-                                            onClick: async () => {
-                                                const pass = document.getElementById('sync-pass').value; if(!pass) return alert("Ingresa tu contraseña.");
-                                                const btn = document.getElementById('btn-sync-now'); btn.disabled = true; btn.textContent = 'Buscando dispositivos...';
-                                                const success = await SDK.iniciarSincronizacion(pass);
-                                                if(!success) { alert("No se encontraron dispositivos o contraseña incorrecta."); btn.disabled = false; btn.textContent = 'Intentar de nuevo'; }
-                                            } 
-                                        }, '🔄 Iniciar Sincronización P2P')
-                                    ])
-                                ]),
-                                h('div', { style: { display:'flex', gap:'12px', marginTop:'20px'} }, [
-                                    h('button', { className:'btn btn-ghost', style:{flex:1}, onClick:() => { document.getElementById('modal-account').classList.remove('active'); } }, 'Cerrar'),
-                                    h('button', { className:'btn btn-primary', style:{flex:1}, onClick: async () => {
-                                            if(confirm("¿Estás ABSOLUTAMENTE seguro? Se borrará TODO.")) {
-                                                if(DB.db) DB.db.close();
-                                                const req = indexedDB.deleteDatabase('bitchat_db');
-                                                req.onsuccess = () => { localStorage.clear(); location.reload(); };
-                                                req.onblocked = () => { alert("Por favor, cierra otras pestañas de BitChat."); };
-                                            }
-                                        } 
-                                    }, 'Borrar Cuenta')
-                                ])
-                            ])
-                        ])
-                    ]);
-                    root.replaceChildren(h('div', { className: 'app-container fade-in' }, [modal, modalConfig, modalAccount, header, h('div', { className: 'main-content' }, [sidebar, chatArea])]));
-                }
-                updateContactList(); Estado.lastPantalla = 'DASHBOARD';
-            }
-        }
-
-        async function updateContactList() {
-            const list = document.getElementById('contact-list');
-            const reqList = document.getElementById('request-list');
-            const reqSection = document.getElementById('request-section');
-            if (!list || !reqList) return;
-
-            const requests = await DB.getRequests();
-            if(requests.length > 0) {
-                reqSection.style.display = 'flex';
-                reqList.replaceChildren(...requests.map(r => h('div', { className:'request-card' }, [
-                    h('p', { style:{fontSize:'14px', fontWeight:'700'} }, r.idPublico),
-                    h('div', { style:{display:'flex', gap:'8px'} }, [
-                        h('button', { className:'btn btn-success btn-sm', onClick: () => SDK.aceptarConexion(r.idPublico) }, 'Aceptar'),
-                        h('button', { className:'btn btn-ghost btn-sm', onClick: () => { DB.deleteRequest(r.idPublico); updateContactList(); } }, 'X')
                     ])
-                ])));
-            } else { reqSection.style.display = 'none'; }
-
-            const misContactos = BitChatAuth.obtenerContactos();
-            const items = Object.keys(misContactos).map(cel => {
-                const isSecure = SDK.conexionesP2PDirectas[cel]?.status === 'SECURE';
-                const c = misContactos[cel];
-                return h('div', { 
-                    className: `user-card ${Estado.chatConIdPublico === cel ? 'active' : ''}`,
-                    onClick: () => { 
-                        Estado.chatConIdPublico = cel; Estado.mostrarChatMobile = true;
-                        render();
-                        document.getElementById('chat-header').textContent = `Canal Seguro: ${cel}`;
-                        document.getElementById('btn-config').style.display = 'block';
-                        loadHistory(cel); updateContactList();
-                    }
-                }, [
-                    h('div', {}, [
-                        h('p', { style:{fontWeight:'700', fontSize:'14px', color: c.insecure ? 'var(--primary)' : 'inherit'} }, cel),
-                        c.insecure ? h('p', { style:{fontSize:'10px', color:'var(--primary)'} }, 'SUPLANTACIÓN DETECTADA') : null
-                    ]),
-                    h('span', { className: `status-badge ${c.insecure ? 'status-insecure' : (isSecure ? 'status-online' : 'status-offline')}` }, c.insecure ? 'INSECURE' : (isSecure ? 'SECURE' : 'LINK'))
                 ]);
-            });
-            list.replaceChildren(...items);
+
+                const header = h('div', { className: 'header' }, [
+                    h('div', { style: { display:'flex', alignItems:'center', gap:'12px'} }, [
+                        h('div', { style: { width:'10px', height:'10px', background:'var(--success)', borderRadius:'50%', boxShadow:'0 0 8px var(--success)'} }),
+                        h('h2', { style: { fontSize:'18px', fontWeight:'700'} }, `@${misCreds.idPrivado}`),
+                        h('span', { style: { fontSize:'12px', color:'var(--text-dim)'} }, `[ID: ${misCreds.idPublico}]`)
+                    ]),
+                    h('div', { style: { display:'flex', gap:'12px' } }, [
+                        h('button', { className:'btn btn-ghost', style:{padding:'6px 12px'}, onClick:() => { Estado.showModalConfig = true; render(); } }, '⚙ Configuración'),
+                        h('button', { className:'btn btn-ghost', style:{padding:'6px 12px'}, onClick:()=>location.reload() }, 'Cerrar Terminal')
+                    ])
+                ]);
+
+                const requests = await DB.getRequests();
+                const sidebar = h('div', { id: 'sidebar', className: `sidebar ${!Estado.mostrarChatMobile ? 'active' : ''}` }, [
+                    h('button', { className:'btn btn-primary', onClick:() => { Estado.showModalAdd = true; render(); } }, '+ Añadir Nodo'),
+                    requests.length > 0 ? h('div', { style: { display:'flex', flexDirection:'column', gap:'8px'} }, [
+                        h('h4', { style:{fontSize:'12px', color:'var(--primary)', marginTop:'10px'} }, 'Solicitudes Pendientes'),
+                        ...requests.map(r => h('div', { className:'request-card' }, [
+                            h('p', { style:{fontSize:'14px', fontWeight:'700'} }, r.idPublico),
+                            h('div', { style:{display:'flex', gap:'8px'} }, [
+                                h('button', { className:'btn btn-success btn-sm', onClick: () => SDK.aceptarConexion(r.idPublico) }, 'Aceptar'),
+                                h('button', { className:'btn btn-ghost btn-sm', onClick: () => { DB.deleteRequest(r.idPublico); render(); } }, 'X')
+                            ])
+                        ]))
+                    ]) : null,
+                    h('h4', { style:{fontSize:'12px', color:'var(--text-dim)', marginTop:'10px'} }, 'Contactos'),
+                    h('div', { id: 'contact-list', style: { display:'flex', flexDirection:'column', gap:'8px', overflowY:'auto', flex:1} }, [
+                        ...Object.keys(BitChatAuth.obtenerContactos()).map(cel => {
+                            const isSecure = SDK.conexionesP2PDirectas[cel]?.status === 'SECURE';
+                            const c = BitChatAuth.obtenerContactos()[cel];
+                            return h('div', { 
+                                className: `user-card ${Estado.chatConIdPublico === cel ? 'active' : ''}`,
+                                onClick: () => { Estado.chatConIdPublico = cel; Estado.mostrarChatMobile = true; render(); }
+                            }, [
+                                h('div', {}, [
+                                    h('p', { style:{fontWeight:'700', fontSize:'14px', color: c.insecure ? 'var(--primary)' : 'inherit'} }, cel),
+                                    c.insecure ? h('p', { style:{fontSize:'10px', color:'var(--primary)'} }, 'SUPLANTACIÓN DETECTADA') : null
+                                ]),
+                                h('span', { className: `status-badge ${c.insecure ? 'status-insecure' : (isSecure ? 'status-online' : 'status-offline')}` }, c.insecure ? 'INSECURE' : (isSecure ? 'SECURE' : 'LINK'))
+                            ]);
+                        })
+                    ])
+                ]);
+
+                const currentContact = Estado.chatConIdPublico;
+                const isMobile = window.matchMedia("(max-width: 768px)").matches;
+                const chatArea = h('div', { 
+                    id: 'chat-area', 
+                    className: `chat-area ${(Estado.mostrarChatMobile || !isMobile) && currentContact ? 'active' : ''}` 
+                }, [
+                    h('div', { className: 'glass-card', style: { flex:1, padding:'20px'} }, [
+                        h('div', { style:{marginBottom:'16px', borderBottom:'1px solid var(--border)', paddingBottom:'12px', display:'flex', justifyContent:'space-between', alignItems:'center'} }, [
+                            h('div', { style:{display:'flex', alignItems:'center', gap:'10px'} }, [
+                                h('button', { className: 'btn-back-mobile', onClick: () => { Estado.mostrarChatMobile = false; render(); } }, '←'),
+                                h('h3', { id: 'chat-header' }, currentContact ? `Canal Seguro: ${currentContact}` : 'Seleccione un nodo operativo')
+                            ]),
+                            h('button', { className: 'btn btn-ghost', style: { padding:'4px 8px', display: currentContact ? 'block' : 'none' },
+                                onClick: () => { Estado.showModalConfig = true; render(); }
+                            }, '⚙')
+                        ]),
+                        h('div', { id: 'chat-flow', style:{flex:1, overflowY:'auto', display:'flex', flexDirection:'column'} }),
+                        h('div', { style:{marginTop:'20px', display:'flex', gap:'12px'} }, [
+                            h('input', { id:'f-msg', className:'terminal-input', style:{flex:1}, placeholder:'Escribir comando de mensaje...' }),
+                            h('button', { className:'btn btn-success', onClick: async () => {
+                                    const el = document.getElementById('f-msg'); const txt = el.value.trim();
+                                    if(!txt || !Estado.chatConIdPublico) return;
+                                    await SDK.enviarMensaje(Estado.chatConIdPublico, txt);
+                                    el.value = ''; loadHistory(Estado.chatConIdPublico);
+                                }
+                            }, 'Enviar')
+                        ])
+                    ])
+                ]);
+
+                const modalConfig = h('div', { className: `modal-overlay ${Estado.showModalConfig && Estado.chatConIdPublico ? 'active' : ''}` }, [
+                    h('div', { className: 'glass-card modal-content', style: { padding:'30px'} }, [
+                        h('h3', { style: { marginBottom:'20px', color:'var(--primary)'} }, 'Configuración del Canal'),
+                        h('div', { style: { display:'flex', flexDirection:'column', gap:'16px'} }, [
+                            h('p', { style: { fontSize:'14px', color:'var(--text-dim)'} }, '¿Estás seguro de que deseas eliminar este chat y todo su historial? Esta acción es irreversible.'),
+                            h('div', { style: { display:'flex', gap:'12px', marginTop:'10px'} }, [
+                                h('button', { className:'btn btn-ghost', style:{flex:1}, onClick:() => { Estado.showModalConfig = false; render(); } }, 'Cerrar'),
+                                h('button', { className:'btn btn-primary', style:{flex:1}, onClick: async () => {
+                                        if(Estado.chatConIdPublico) {
+                                            await DB.deleteChat(Estado.chatConIdPublico);
+                                            const contactos = BitChatAuth.obtenerContactos(); delete contactos[Estado.chatConIdPublico];
+                                            localStorage.setItem('bitchat_auth_contacts', JSON.stringify(contactos));
+                                            Estado.chatConIdPublico = null; Estado.mostrarChatMobile = false; Estado.showModalConfig = false;
+                                            render();
+                                        }
+                                    } 
+                                }, 'Eliminar Chat')
+                            ])
+                        ])
+                    ])
+                ]);
+
+                const modalAccount = h('div', { className: `modal-overlay ${Estado.showModalConfig && !Estado.chatConIdPublico ? 'active' : ''}` }, [
+                    h('div', { className: 'glass-card modal-content', style: { padding:'30px'} }, [
+                        h('h3', { style: { marginBottom:'20px', color:'var(--primary)'} }, 'Configuración de la Terminal'),
+                        h('div', { style: { display:'flex', flexDirection:'column', gap:'16px'} }, [
+                            h('p', { style: { fontSize:'14px', color:'var(--text-dim)'} }, '¿Deseas eliminar permanentemente tu cuenta y todos los datos locales? Se borrarán tus credenciales, contactos y todos los mensajes.'),
+                            h('div', { style: { marginTop:'20px', borderTop:'1px solid var(--border)', paddingTop:'20px'} }, [
+                                h('h4', { style:{fontSize:'14px', marginBottom:'10px', color:'var(--accent-blue)'} }, 'Sincronizar Dispositivos'),
+                                h('div', { style:{display:'flex', flexDirection:'column', gap:'10px'} }, [
+                                    h('input', { type:'password', id:'sync-pass', className:'terminal-input', placeholder:'Confirma tu Contraseña Maestra' }),
+                                    h('button', { className:'btn btn-ghost', onClick: async () => {
+                                            const pass = document.getElementById('sync-pass').value; if(!pass) return alert("Ingresa tu contraseña.");
+                                            const success = await SDK.iniciarSincronizacion(pass);
+                                            if(!success) alert("No se encontraron dispositivos o contraseña incorrecta.");
+                                        } 
+                                    }, '🔄 Iniciar Sincronización P2P')
+                                ])
+                            ]),
+                            h('div', { style: { display:'flex', gap:'12px', marginTop:'20px'} }, [
+                                h('button', { className:'btn btn-ghost', style:{flex:1}, onClick:() => { Estado.showModalConfig = false; render(); } }, 'Cerrar'),
+                                h('button', { className:'btn btn-primary', style:{flex:1}, onClick: async () => {
+                                        if(confirm("¿Estás ABSOLUTAMENTE seguro? Se borrará TODO.")) {
+                                            if(DB.db) DB.db.close();
+                                            const req = indexedDB.deleteDatabase('bitchat_db');
+                                            req.onsuccess = () => { localStorage.clear(); location.reload(); };
+                                        }
+                                    } 
+                                }, 'Borrar Cuenta')
+                            ])
+                        ])
+                    ])
+                ]);
+
+                root.replaceChildren(h('div', { className: 'app-container fade-in' }, [modalAdd, modalConfig, modalAccount, header, h('div', { className: 'main-content' }, [sidebar, chatArea])]));
+                if(currentContact) loadHistory(currentContact);
+            }
         }
 
         DB.init().then(async () => {
