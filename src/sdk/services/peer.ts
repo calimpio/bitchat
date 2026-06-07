@@ -222,6 +222,7 @@ export const PeerService: IPeerService = {
                     publicKey: misCreds.publicKey!
                 });
                 this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencial);
+                alert(`Conexión segura establecida con ${paquete.miIdPublico}`);
             }
             if (paquete.tipo === 'HANDSHAKE_FINAL') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
@@ -230,6 +231,7 @@ export const PeerService: IPeerService = {
                 await BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencialAmigo, false, paquete.publicKey);
                 this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencialAmigo);
                 this._enviarPendientes(paquete.miIdPublico, conn);
+                alert(`Conexión segura finalizada con ${paquete.miIdPublico}`);
                 if (this.onRefresh) this.onRefresh();
             }
             if (paquete.tipo === 'MSG') {
