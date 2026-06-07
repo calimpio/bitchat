@@ -1,4 +1,4 @@
-import { h, DOMChild } from '../utils/dom.ts';
+import { h } from '../utils/dom.ts';
 import { Estado, DB, BitChatAuth, PeerService, CryptoService } from '../sdk/index.ts';
 import { Card } from '../components/ui/Card.ts';
 import { Button } from '../components/ui/Button.ts';
@@ -11,13 +11,23 @@ export async function DashboardPage(renderApp: () => void) {
     const misCreds = Estado.me;
     const myFingerprint = misCreds.publicKey ? await CryptoService.getFingerprint(misCreds.publicKey) : '';
 
+    const logout = () => {
+        if (PeerService.peer) PeerService.peer.destroy();
+        Estado.pantalla = 'AUTH_LOGIN';
+        Estado.activeApp = 'bitChat';
+        Estado.masterPassword = '';
+        Estado.aesKey = undefined;
+        Estado.chatConIdPublico = null;
+        renderApp();
+    };
+
     // --- SUB-APP: bitChat ---
     async function bitChatView(): Promise<HTMLElement> {
         const requests = await DB.getRequests();
         const allContactos = await BitChatAuth.obtenerContactos();
         const currentContact = Estado.chatConIdPublico;
 
-        const contactList = h('div', { className: 'contact-list-pane', style: { width: '300px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto', borderRight: '1px solid var(--border)', paddingRight: '10px' } }, [
+        const contactList = h('div', { className: 'contact-list-pane', style: { width: '100%', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' } }, [
             Button({ text: '+ Añadir Nodo', onClick: () => { Estado.showModalAdd = true; renderApp(); } }),
             requests.length > 0 ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, [
                 h('h4', { className: 'nav-section-title' }, 'Solicitudes'),
@@ -29,17 +39,17 @@ export async function DashboardPage(renderApp: () => void) {
                             reqFingerprint ? h('span', { style: { fontSize: '12px' } }, reqFingerprint) : null
                         ]),
                         h('div', { style: { display: 'flex', gap: '8px' } }, [
-                            Button({ text: 'Aceptar', variant: 'success', className: 'btn-sm', onClick: async () => { await PeerService.aceptarConexion(r.idPublico); updateUI(); } }),
+                            Button({ text: 'Aceptar', variant: 'success', className: 'btn-sm', onClick: async () => { await PeerService.aceptarConexion(r.idPublico); renderApp(); } }),
                             Button({ text: 'Bloquear', variant: 'primary', className: 'btn-sm', onClick: async () => { 
                                 if (confirm(`¿Bloquear permanentemente a ${r.idPublico}?`)) {
                                     await DB.addBlock(r.idPublico);
                                     await DB.deleteRequest(r.idPublico);
-                                    updateUI();
+                                    renderApp();
                                 }
                             }}),
                             Button({ text: 'X', variant: 'ghost', className: 'btn-sm', onClick: async () => { await PeerService.rechazarConexion(r.idPublico); renderApp(); } })
-                            ])
-                            ]);
+                        ])
+                    ]);
                 }))
             ]) : null,
             h('h4', { className: 'nav-section-title' }, 'Contactos'),
@@ -59,7 +69,7 @@ export async function DashboardPage(renderApp: () => void) {
             })
         ]);
 
-        const chatArea = h('div', { className: `chat-area-pane ${Estado.mostrarChatMobile ? 'active' : ''}`, style: { flex: '1', display: 'flex', flexDirection: 'column', gap: '10px', marginLeft: '10px' } }, [
+        const chatArea = h('div', { className: `chat-area-pane ${Estado.mostrarChatMobile ? 'active' : ''}`, style: { width: '100%', height: '100%', display: 'flex', flexDirection: 'column', gap: '10px' } }, [
             Card({ style: { flex: '1', padding: '15px' } }, [
                 h('div', { style: { borderBottom: '1px solid var(--border)', paddingBottom: '10px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
                     h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, [
@@ -91,9 +101,8 @@ export async function DashboardPage(renderApp: () => void) {
             ])
         ]);
 
-        // History injection
-        setTimeout(async () => {
-            if (currentContact) {
+        if (currentContact) {
+            setTimeout(async () => {
                 Estado.historiales[currentContact] = await DB.getChatMessages(currentContact);
                 const flow = document.getElementById('chat-flow');
                 if (flow && Estado.me) {
@@ -109,8 +118,8 @@ export async function DashboardPage(renderApp: () => void) {
                     flow.replaceChildren(...items);
                     flow.scrollTop = flow.scrollHeight;
                 }
-            }
-        }, 0);
+            }, 0);
+        }
 
         return h('div', { className: 'bit-chat-container', style: { display: 'flex', flex: '1', width: '100%', height: '100%', overflow: 'hidden'} }, [
             !currentContact ? contactList : chatArea
@@ -139,10 +148,17 @@ export async function DashboardPage(renderApp: () => void) {
                         h('span', { style: { fontSize: '13px'} }, id),
                         Button({ text: 'Desbloquear', variant: 'ghost', className: 'btn-sm', onClick: async () => {
                             await DB.unblock(id);
-                            updateUI();
+                            renderApp();
                         }})
                     ])) : [h('p', { style: { fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic'} }, 'Ningún número bloqueado')]
                 )
+            ]),
+            Card({ style: { padding: '20px'} }, [
+                h('h4', { style: { marginBottom: '10px', color: 'var(--success)'} }, 'Diagnóstico de Red'),
+                h('div', { style: { background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', fontSize: '11px', fontFamily: 'monospace'} }, [
+                    h('p', { style: { color: 'var(--text-dim)', marginBottom: '5px'} }, 'Peer ID (Ofuscado):'),
+                    h('p', { style: { wordBreak: 'break-all'} }, PeerService.peer?.id || 'Generando...')
+                ])
             ]),
             Card({ style: { padding: '20px'} }, [
                 h('h4', { style: { marginBottom: '10px', color: 'var(--secondary)'} }, 'Sincronización'),
@@ -184,14 +200,17 @@ export async function DashboardPage(renderApp: () => void) {
         h('div', { className: 'sidebar-footer' }, [
             h('div', { className: `nav-item ${Estado.activeApp === 'Settings' ? 'active' : ''}`, 
                 onClick: () => { Estado.activeApp = 'Settings'; Estado.showSidebar = false; renderApp(); } }, '⚙ Configuración'),
-            h('div', { className: 'nav-item', style: { color: 'var(--primary)'}, onClick: () => location.reload() }, '🔓 Cerrar Terminal')
+            h('div', { className: 'nav-item', style: { color: 'var(--primary)'}, onClick: logout }, '🔓 Cerrar Terminal')
         ])
-        ]);
+    ]);
 
     const header = h('div', { className: 'header' }, [
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, [
             h('button', { className: 'btn-menu-mobile', onClick: () => { Estado.showSidebar = !Estado.showSidebar; renderApp(); } }, '☰'),
-            h('div', { style: { width: '10px', height: '10px', background: 'var(--success)', borderRadius: '50%'} }),
+            h('div', { 
+                style: { width: '10px', height: '10px', borderRadius: '50%', background: PeerService.peer?.open ? 'var(--success)' : '#666', boxShadow: PeerService.peer?.open ? '0 0 8px var(--success)' : 'none' },
+                title: PeerService.peer?.open ? 'Nodo Online' : 'Nodo Desconectado'
+            }),
             h('div', { className: 'mobile-id-info', style: { display: 'none' } }, [
                 h('h2', { style: { fontSize: '14px'} }, `@${misCreds.idPrivado}`),
                 h('span', { style: { fontSize: '8px', color: 'var(--accent-blue)'} }, myFingerprint)
@@ -199,7 +218,10 @@ export async function DashboardPage(renderApp: () => void) {
             h('h2', { className: 'desktop-only', style: { fontSize: '16px'} }, `@${misCreds.idPrivado}`),
             h('span', { className: 'desktop-only', style: { fontSize: '10px', color: 'var(--text-dim)'} }, `| ID: ${misCreds.idPublico}`)
         ]),
-        h('div', { className: 'desktop-only', style: { fontSize: '12px', color: 'var(--text-dim)'} }, `App: ${Estado.activeApp}`)
+        h('div', { className: 'desktop-only', style: { display: 'flex', gap: '12px', alignItems: 'center' } }, [
+            h('span', { style: { fontSize: '12px', color: 'var(--text-dim)'} }, `App: ${Estado.activeApp}`),
+            Button({ text: '🔓 Salir', variant: 'ghost', style: { padding: '6px 12px' }, onClick: logout })
+        ])
     ]);
 
     // Modals
@@ -236,7 +258,7 @@ export async function DashboardPage(renderApp: () => void) {
 
     let activeContent: HTMLElement;
     if (Estado.activeApp === 'bitChat') activeContent = await bitChatView();
-    else if (Estado.activeApp === 'Settings') activeContent = settingsView();
+    else if (Estado.activeApp === 'Settings') activeContent = await settingsView();
     else activeContent = h('div', { style: { textAlign: 'center', marginTop: '50px', color: 'var(--text-dim)'} }, 'Próximamente...');
 
     return h('div', { className: `app-container fade-in ${Estado.showSidebar ? 'sidebar-open' : ''}` }, [
