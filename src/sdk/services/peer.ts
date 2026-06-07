@@ -19,24 +19,28 @@ export const PeerService: IPeerService = {
         const hashedId = await hashString(idPublico);
         const myAuthId = `bc-v2-${hashedId.substring(0, 24)}`;
 
+        Debug.log(`Inicializando nodo para ${idPublico} -> PeerID: ${myAuthId}`);
         if (this.peer) this.peer.destroy();
         this.peer = new Peer(myAuthId);
 
         this.peer.on('open', (id) => {
-            Debug.log(`Nodo Online (Hashed ID): ${id}`);
+            Debug.log(`Nodo Online: ${id}`);
             if (this.onRefresh) this.onRefresh();
             this.startBackgroundSync();
         });
 
         this.peer.on('error', (err: { type: string }) => {
+            Debug.log(`Error Crítico del Peer: ${err.type}`);
             if (err.type === 'unavailable-id') {
                 const suffix = Math.random().toString(36).substring(7);
                 this.inicializarNodo(`${idPublico}-${suffix}`);
             }
-            Debug.log(`Error: ${err.type}`);
         });
 
-        this.peer.on('connection', (conn) => this._procesarEntrante(conn));
+        this.peer.on('connection', (conn) => {
+            Debug.log(`Conexión entrante detectada desde: ${conn.peer}`);
+            this._procesarEntrante(conn);
+        });
     },
 
     async validarIdentidadEnRed(idPublico: string, idPrivado: string, passwordHash: string): Promise<boolean> {
@@ -48,22 +52,33 @@ export const PeerService: IPeerService = {
             const targetHashedId = await hashString(idPublico);
             const targetAuthId = `bc-v2-${targetHashedId.substring(0, 24)}`;
             
+            Debug.log(`Probiendo red para ${idPublico} (Target: ${targetAuthId})`);
             let foundExisting = false;
 
             probePeer.on('open', () => {
                 const conn = probePeer.connect(targetAuthId);
-                const timeout = setTimeout(() => { if (!foundExisting) { probePeer.destroy(); resolve(true); } }, 5000);
+                const timeout = setTimeout(() => { 
+                    if (!foundExisting) { 
+                        Debug.log("Probe timeout: No se encontró nodo existente.");
+                        probePeer.destroy(); resolve(true); 
+                    } 
+                }, 5000);
 
                 conn.on('open', () => {
                     foundExisting = true; clearTimeout(timeout);
+                    Debug.log("Probe: Conectado a nodo existente, enviando IDENTITY_PROBE...");
                     conn.send({ tipo: 'IDENTITY_PROBE', deIdPublico: idPublico, cuarta: miCuarta });
                 });
                 conn.on('data', (data: unknown) => {
                     const paquete = data as IPaqueteData;
+                    Debug.log(`Probe: Recibido respuesta ${paquete.tipo}`);
                     if (paquete.tipo === 'IDENTITY_CONFLICT') { probePeer.destroy(); resolve(false); }
                     if (paquete.tipo === 'IDENTITY_MATCH') { probePeer.destroy(); resolve(true); }
                 });
-                conn.on('error', () => { probePeer.destroy(); resolve(true); });
+                conn.on('error', (err) => { 
+                    Debug.log(`Probe error: ${err}`);
+                    probePeer.destroy(); resolve(true); 
+                });
             });
         });
     },
@@ -73,6 +88,7 @@ export const PeerService: IPeerService = {
         this.syncInterval = setInterval(async () => {
             const pending = await DB.getPendingMessages();
             const uniqueTargets = [...new Set(pending.map(m => m.chatId))];
+            if (uniqueTargets.length > 0) Debug.log(`Sync: Intentando conectar a ${uniqueTargets.length} objetivos con mensajes pendientes.`);
             for (const target of uniqueTargets) { this.conectarAContacto(target); }
             for (const target of Array.from(Estado.solicitudesEnviadasPendientes)) { this.conectarAContacto(target); }
         }, 15000) as unknown as number;
@@ -83,25 +99,39 @@ export const PeerService: IPeerService = {
         const hashedId = await hashString(idPublicoAmigo);
         const targetAuthId = `bc-v2-${hashedId.substring(0, 24)}`;
         
+        Debug.log(`Intentando conectar a amigo: ${idPublicoAmigo} (${targetAuthId})`);
         const conn = this.peer.connect(targetAuthId);
         const contactos = await BitChatAuth.obtenerContactos();
         if (!contactos[idPublicoAmigo]) { Estado.solicitudesEnviadasPendientes.add(idPublicoAmigo); }
 
         conn.on('open', async () => {
+            Debug.log(`Conexión ABIERTA con ${targetAuthId}`);
             const misCreds = await BitChatAuth.obtenerMisCredenciales();
             if (!misCreds) return;
             if (contactos[idPublicoAmigo]) {
                 if (!this.conexionesP2PDirectas[idPublicoAmigo] || this.conexionesP2PDirectas[idPublicoAmigo].status !== 'SECURE') {
                     const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                    Debug.log(`Enviando HANDSHAKE_START a ${idPublicoAmigo}`);
                     conn.send({ 
                         tipo: 'HANDSHAKE_START', 
                         miIdPublico: misCreds.idPublico, 
                         cuartaCredencial: miCuarta,
                         publicKey: misCreds.publicKey
                     });
-                } else { this._enviarPendientes(idPublicoAmigo, conn); }
-            } else { conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico }); }
+                } else { 
+                    Debug.log(`Canal ya seguro con ${idPublicoAmigo}, enviando pendientes.`);
+                    this._enviarPendientes(idPublicoAmigo, conn); 
+                }
+            } else { 
+                Debug.log(`Enviando CONNECTION_REQ a ${idPublicoAmigo}`);
+                conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico }); 
+            }
         });
+
+        conn.on('error', (err) => {
+            Debug.log(`Error de conexión con ${idPublicoAmigo}: ${err}`);
+        });
+
         conn.on('data', () => { Estado.solicitudesEnviadasPendientes.delete(idPublicoAmigo); });
         this._procesarEntrante(conn);
     },
