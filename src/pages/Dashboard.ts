@@ -229,11 +229,17 @@ export async function DashboardPage(renderApp: () => void) {
         active: Estado.showModalAdd, title: 'Enlazar Nodo',
         children: [
             Input({ id: 'modal-add-id', placeholder: 'ID (Número)' }),
+            Input({ id: 'modal-add-fingerprint', placeholder: 'Huella (Opcional)', style: { marginTop: '10px' } }),
             h('div', { style: { display: 'flex', gap: '10px', marginTop: '10px'} }, [
                 Button({ text: 'Cancelar', variant: 'ghost', style: { flex: '1' }, onClick: () => { Estado.showModalAdd = false; renderApp(); } }),
                 Button({ text: 'Enlazar', style: { flex: '1' }, onClick: () => {
                     const id = (document.getElementById('modal-add-id') as HTMLInputElement).value.trim();
-                    if (id) { PeerService.conectarAContacto(id); Estado.showModalAdd = false; renderApp(); }
+                    const fingerprint = (document.getElementById('modal-add-fingerprint') as HTMLInputElement).value.trim() || undefined;
+                    if (id) { 
+                        PeerService.conectarAContacto(id, fingerprint); 
+                        Estado.showModalAdd = false; 
+                        renderApp(); 
+                    }
                 }})
             ])
         ]
