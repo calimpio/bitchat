@@ -25,6 +25,8 @@ desktop.ini
 
 # Winget / Build outputs
 publish/
+publish_64/
+windows/www/
 *.zip
 *.exe
 *.msi

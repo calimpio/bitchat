@@ -2,47 +2,77 @@
 
 Terminal de mensajería **soberana y privada** que utiliza criptografía SHA-256 y redes P2P directas. BitChat no utiliza servidores centrales; toda la inteligencia y los datos residen exclusivamente en tu terminal.
 
+Esta versión ha sido modernizada a una arquitectura **TypeScript Local-First** con un pipeline de automatización para escritorio.
+
 ## 🚀 Características Principales
 
 ### 1. Soberanía de Identidad
 - **Sin Servidores**: No hay base de datos central. Tu identidad es un par de claves criptográficas generadas localmente.
-- **Identidad Numérica**: Los usuarios se identifican únicamente por su ID Público (ej. número de celular), eliminando metadatos innecesarios.
-- **Protección Anti-Secuestro**: Sistema de validación en red que impide que un tercero reclame tu ID Público si ya estás activo. Si se detecta un intento de suplantación, tus contactos son alertados automáticamente.
+- **Identidad Numérica**: Los usuarios se identifican únicamente por su ID Público, eliminando metadatos innecesarios.
+- **Protección Anti-Secuestro**: Sistema de validación en red que impide que un tercero reclame tu ID Público.
 
-### 2. Privacidad Extrema (Handshake de 3 Capas)
-- **Confirmación Manual**: Nadie puede enviarte mensajes sin que aceptes su solicitud de conexión.
-- **Privacidad de Nickname**: Los nicknames son locales y privados. Nunca se comparten por la red; los pares solo ven IDs verificados.
-- **Handshake Criptográfico**: Intercambio automático de la **Cuarta Credencial** para establecer un canal seguro único (**Quinta ID**) entre dos terminales.
+### 2. Privacidad Extrema
+- **Handshake Criptográfico**: Intercambio automático de credenciales para establecer canales seguros únicos.
+- **Privacidad de Nickname**: Los nicknames son locales y privados.
+- **Control Total**: Borrado permanente de datos locales (Wipe) y eliminación de chats.
 
-### 3. Sincronización Multi-dispositivo P2P
-- **Sesiones Concurrentes**: Puedes tener BitChat abierto en tu PC, móvil y tablet simultáneamente con la misma cuenta.
-- **Sincronización Segura**: Transfiere tus contactos y mensajes entre tus propios dispositivos mediante un desafío criptográfico directo, sin pasar por la nube.
+### 3. Sincronización P2P
+- **Sincronización Segura**: Transfiere contactos y mensajes entre tus propios dispositivos mediante desafíos criptográficos directos.
 
-### 4. Gestión de Datos y Seguridad
-- **Mensajería Offline**: Los mensajes se guardan localmente y se reintentan enviar automáticamente en cuanto el destinatario se conecta.
-- **Deduplicación Inteligente**: Uso de UUIDs universales e índices únicos en base de datos para evitar mensajes repetidos.
-- **Control Total**: Opciones para eliminar chats individuales o borrar permanentemente la cuenta y todos los datos locales (Wipe).
+## 🛠 Arquitectura Técnica
 
-### 5. Interfaz Adaptativa (Responsive)
-- **Terminal Universal**: Diseño optimizado tanto para monitores de escritorio como para pantallas móviles.
-- **Modo Mobile**: Navegación fluida entre lista de contactos y chat en pantallas pequeñas.
+El proyecto se divide en una arquitectura moderna de frontend TypeScript y un contenedor nativo para Windows:
 
-## 🛠 Tecnología
-- **Motor**: .NET 8 con WebView2 (Contenedor Nativo).
-- **Core**: JavaScript Vanilla con arquitectura de Micro-Componentes (h-func).
-- **Red**: PeerJS (WebRTC) para conexiones directas punto a punto.
-- **Base de Datos**: IndexedDB (Local-first) con cifrado por derivación de contraseña maestra.
-- **Criptografía**: SHA-256 para generación de credenciales y validación de canales.
+### Frontend (TypeScript + Vite)
+- **Local-First SDK**: Lógica modular en `src/sdk/` para base de datos (IndexedDB), autenticación y networking P2P (PeerJS/WebRTC).
+- **Componentes UI**: Sistema ligero de micro-componentes funcionales en `src/components/ui/`.
+- **Estado Global**: Gestión de estado tipado en `src/sdk/models/state.ts`.
+- **Vite**: Bundler ultra-rápido para desarrollo y producción.
+
+### Contenedor Windows (.NET 8)
+- **WebView2**: Integración nativa del motor de Chrome para ejecutar el frontend.
+- **Virtual Hosting**: Mapeo de archivos locales a un dominio seguro (`https://bitchat.local`).
+
+## 📁 Estructura del Proyecto
+
+- `src/`: Código fuente de la aplicación TypeScript.
+  - `sdk/`: Servicios de Red, DB y Auth.
+  - `components/`: UI reutilizable.
+  - `pages/`: Vistas de la aplicación.
+- `windows/`: Proyecto .NET y herramientas de automatización.
+  - `www/`: Build de producción de la web para la terminal.
+  - `manifests/`: Manifiestos de instalación para WinGet.
+  - `sync.cjs`: Script de sincronización de assets.
+  - `build.cjs`: Pipeline de compilación y actualización de manifiestos.
+
+## 🛠 Desarrollo y Build
+
+### Requisitos
+- Node.js (v18+)
+- .NET 8 SDK (para la versión de escritorio)
+
+### Comandos de Frontend
+```bash
+npm install      # Instalar dependencias
+npm run dev      # Servidor de desarrollo (Vite)
+npm run build    # Compilar frontend (TypeScript -> JS)
+```
+
+### Comandos de Windows (Desktop)
+```bash
+# 1. Sincronizar el build web con la carpeta de Windows
+npm run sync-windows
+
+# 2. Compilar ejecutable, empaquetar ZIP y actualizar manifiestos WinGet
+npm run build-windows-64
+```
 
 ## 📦 Instalación
 
-### WinGet (Recomendado)
+### WinGet
 ```powershell
 winget install BitChat
 ```
-
-### Manual
-Descarga el último `BitChat_v1.0.0.zip` desde la sección de [Releases](https://github.com/calimpio/bitchat/releases), extráelo y ejecuta `BitChat.exe`.
 
 ---
 *Desarrollado por Calimpio - "Tu terminal, tu soberanía."*

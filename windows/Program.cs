@@ -39,12 +39,14 @@ namespace BitChat
             await webView.EnsureCoreWebView2Async(null);
             
             // Allow access to local files for PeerJS and DB
+            string wwwPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "www");
+            
             webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "bitchat.local", 
-                AppDomain.CurrentDomain.BaseDirectory, 
+                wwwPath, 
                 CoreWebView2HostResourceAccessKind.Allow);
 
-            webView.Source = new Uri("https://bitchat.local/bitchat.html");
+            webView.Source = new Uri("https://bitchat.local/index.html");
             
             // Hide context menu and dev tools for a more native feel
             webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
