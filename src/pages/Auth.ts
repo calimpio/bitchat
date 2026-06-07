@@ -57,7 +57,8 @@ export function AuthPage(renderApp: () => void) {
                             }
                             Estado.masterPassword = pass;
                             
-                            // 🚀 Run Migration Protocol
+                            // 🚀 Run Migration Protocols
+                            await BitChatAuth.migrarContactosSeguros();
                             await DB.migratePlainMessages();
 
                             if (Estado.me) {

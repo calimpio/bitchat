@@ -1,4 +1,5 @@
 import { Message, RequestRecord, Credentials } from '../../models/types.ts';
+import { EncryptedVaultObject } from '../../models/vault.ts';
 
 /**
  * IDBService handles local persistence using IndexedDB.
@@ -58,6 +59,15 @@ export interface IDBService {
 
     /** Retrieves all messages that have been saved locally but not yet acknowledged as sent. */
     getPendingMessages(): Promise<Message[]>;
+
+    /** Saves a contact record (usually as a vault-encrypted object). */
+    saveContact(idPublico: string, data: EncryptedVaultObject): Promise<void>;
+
+    /** Retrieves all saved contacts. */
+    getContacts(): Promise<EncryptedVaultObject[]>;
+
+    /** Removes a contact from the database. */
+    deleteContact(idPublico: string): Promise<void>;
 
     /** 
      * Migration Protocol: Iterates through the database and encrypts any plain-text messages 

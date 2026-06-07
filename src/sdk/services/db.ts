@@ -2,13 +2,14 @@ import { Message, RequestRecord, Credentials } from '../models/types.ts';
 import { Estado } from '../models/state.ts';
 import { CryptoService } from './crypto.ts';
 import { IDBService } from './interfaces/IDBService.ts';
+import { EncryptedVaultObject } from '../models/vault.ts';
 
 export const DB: IDBService = {
     db: null,
 
     init(): Promise<void> {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('bitchat_db', 5);
+            const req = indexedDB.open('bitchat_db', 6);
             req.onupgradeneeded = (e) => {
                 const db = (e.target as IDBOpenDBRequest).result;
                 if (!db.objectStoreNames.contains('messages')) {
@@ -28,6 +29,9 @@ export const DB: IDBService = {
                 }
                 if (!db.objectStoreNames.contains('requests')) {
                     db.createObjectStore('requests', { keyPath: 'idPublico' });
+                }
+                if (!db.objectStoreNames.contains('contacts')) {
+                    db.createObjectStore('contacts', { keyPath: 'idPublico' });
                 }
             };
             req.onsuccess = (e) => {
@@ -233,6 +237,34 @@ export const DB: IDBService = {
             if (m.iv) m.msg = await this.decryptMsg(m.msg, m.iv);
         }
         return messages;
+    },
+
+    async saveContact(idPublico: string, data: EncryptedVaultObject): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('contacts', 'readwrite');
+            const store = tx.objectStore('contacts');
+            store.put({ idPublico, ...data }).onsuccess = () => resolve();
+        });
+    },
+
+    async getContacts(): Promise<EncryptedVaultObject[]> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve([]);
+            const tx = this.db.transaction('contacts', 'readonly');
+            const store = tx.objectStore('contacts');
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result);
+        });
+    },
+
+    async deleteContact(idPublico: string): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('contacts', 'readwrite');
+            const store = tx.objectStore('contacts');
+            store.delete(idPublico).onsuccess = () => resolve();
+        });
     },
 
     async migratePlainMessages(): Promise<void> {

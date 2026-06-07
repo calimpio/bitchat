@@ -96,5 +96,26 @@ export const CryptoService = {
         );
         const decoder = new TextDecoder();
         return decoder.decode(decrypted);
+    },
+
+    async getFingerprint(jwk: JsonWebKey): Promise<string> {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(JSON.stringify(jwk));
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = new Uint8Array(hashBuffer);
+        
+        const emojiList = [
+            '🛡️', '🛰️', '💎', '🔑', '🧊', '🔥', '⚡', '🌌', 
+            '🌿', '🍀', '🍎', '🍄', '🌍', '🌙', '⭐', '☀️',
+            '🛸', '🚁', '🚀', '⛵', '🏔️', '🌋', '🏝️', '🗿'
+        ];
+        
+        let fingerprint = '';
+        // Use first 5 bytes to pick 5 emojis
+        for (let i = 0; i < 5; i++) {
+            const index = hashArray[i] % emojiList.length;
+            fingerprint += emojiList[index];
+        }
+        return fingerprint;
     }
 };

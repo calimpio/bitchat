@@ -1,5 +1,5 @@
 import { h } from '../utils/dom.ts';
-import { Estado, DB, BitChatAuth, PeerService } from '../sdk/index.ts';
+import { Estado, DB, BitChatAuth, PeerService, CryptoService } from '../sdk/index.ts';
 import { Card } from '../components/ui/Card.ts';
 import { Button } from '../components/ui/Button.ts';
 import { Input } from '../components/ui/Input.ts';
@@ -44,6 +44,7 @@ export async function DashboardPage(renderApp: () => void) {
     ]);
 
     const requests = await DB.getRequests();
+    const allContactos = await BitChatAuth.obtenerContactos();
     
     const sidebar = h('div', { id: 'sidebar', className: `sidebar ${!Estado.mostrarChatMobile ? 'active' : ''}` }, [
         Button({ text: '+ Añadir Nodo', onClick: () => { Estado.showModalAdd = true; renderApp(); } }),
@@ -58,10 +59,10 @@ export async function DashboardPage(renderApp: () => void) {
             ]))
         ]) : null,
         h('h4', { style: { fontSize: '12px', color: 'var(--text-dim)', marginTop: '10px' } }, 'Contactos'),
-        h('div', { id: 'contact-list', style: { display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', flex: 1 } }, [
-            ...Object.keys(BitChatAuth.obtenerContactos()).map(cel => {
+        h('div', { id: 'contact-list', style: { display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', flex: '1' } }, [
+            ...Object.keys(allContactos).map(cel => {
                 const isSecure = PeerService.conexionesP2PDirectas[cel]?.status === 'SECURE';
-                const c = BitChatAuth.obtenerContactos()[cel];
+                const c = allContactos[cel];
                 return h('div', { 
                     className: `user-card ${Estado.chatConIdPublico === cel ? 'active' : ''}`,
                     onClick: () => { Estado.chatConIdPublico = cel; Estado.mostrarChatMobile = true; renderApp(); }
@@ -79,6 +80,12 @@ export async function DashboardPage(renderApp: () => void) {
     const currentContact = Estado.chatConIdPublico;
     const isMobile = window.matchMedia("(max-width: 768px)").matches;
     
+    const contactInfo = currentContact ? allContactos[currentContact] : null;
+    let fingerprint = '';
+    if (contactInfo && contactInfo.publicKey) {
+        fingerprint = await CryptoService.getFingerprint(contactInfo.publicKey);
+    }
+
     const chatArea = h('div', { 
         id: 'chat-area', 
         className: `chat-area ${(Estado.mostrarChatMobile || !isMobile) && currentContact ? 'active' : ''}` 
@@ -87,7 +94,13 @@ export async function DashboardPage(renderApp: () => void) {
             h('div', { style: { marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, [
                     h('button', { className: 'btn-back-mobile', onClick: () => { Estado.mostrarChatMobile = false; renderApp(); } }, '←'),
-                    h('h3', { id: 'chat-header' }, currentContact ? `Canal Seguro: ${currentContact}` : 'Seleccione un nodo operativo')
+                    h('div', {}, [
+                        h('h3', { id: 'chat-header' }, currentContact ? `Canal Seguro: ${currentContact}` : 'Seleccione un nodo operativo'),
+                        fingerprint ? h('p', { style: { fontSize: '10px', color: 'var(--text-dim)', marginTop: '4px' } }, [
+                            h('span', { style: { marginRight: '5px'} }, 'Huella Digital:'),
+                            h('span', { style: { letterSpacing: '2px'} }, fingerprint)
+                        ]) : null
+                    ])
                 ]),
                 h('button', { className: 'btn btn-ghost', style: { padding: '4px 8px', display: currentContact ? 'block' : 'none' },
                     onClick: () => { Estado.showModalConfig = true; renderApp(); }
@@ -118,9 +131,7 @@ export async function DashboardPage(renderApp: () => void) {
                 Button({ text: 'Eliminar Chat', style: { flex: '1' }, onClick: async () => {
                     if (Estado.chatConIdPublico) {
                         await DB.deleteChat(Estado.chatConIdPublico);
-                        const contactos = BitChatAuth.obtenerContactos(); 
-                        delete contactos[Estado.chatConIdPublico];
-                        localStorage.setItem('bitchat_auth_contacts', JSON.stringify(contactos));
+                        await BitChatAuth.eliminarContacto(Estado.chatConIdPublico);
                         Estado.chatConIdPublico = null; 
                         Estado.mostrarChatMobile = false; 
                         Estado.showModalConfig = false;

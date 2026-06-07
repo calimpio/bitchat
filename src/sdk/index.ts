@@ -6,3 +6,4 @@ export * from './services/db.ts';
 export * from './services/auth.ts';
 export * from './services/peer.ts';
 export * from './services/vault.ts';
+export * from './services/crypto.ts';

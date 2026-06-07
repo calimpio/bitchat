@@ -1,7 +1,9 @@
 export interface Credentials {
     idPublico: string;
     idPrivado: string;
-    passwordHash: string;
+    passwordHash?: string; // Legacy (optional for migration)
+    authWitness?: string; // Base64 encrypted witness
+    authIv?: string; // Base64 IV for witness
     salt?: string; // base64 (optional for migration)
     publicKey?: JsonWebKey;
     encryptedPrivateKey?: string; // base64

@@ -1,6 +1,6 @@
 import { Peer, DataConnection } from 'peerjs';
 import { DB } from './db.ts';
-import { BitChatAuth, generarCuartaCredencial, generarQuintaId } from './auth.ts';
+import { BitChatAuth, generarCuartaCredencial, generarQuintaId, hashString } from './auth.ts';
 import { Estado } from '../models/state.ts';
 import { IPaqueteData } from '../models/types.ts';
 import { CryptoService } from './crypto.ts';
@@ -16,12 +16,14 @@ export const PeerService: IPeerService = {
     onMessage: null,
 
     async inicializarNodo(idPublico: string): Promise<void> {
-        let myAuthId = `bitchat-auth-${idPublico}`;
+        const hashedId = await hashString(idPublico);
+        const myAuthId = `bc-v2-${hashedId.substring(0, 24)}`;
+
         if (this.peer) this.peer.destroy();
         this.peer = new Peer(myAuthId);
 
         this.peer.on('open', (id) => {
-            Debug.log(`Nodo Online: ${id}`);
+            Debug.log(`Nodo Online (Hashed ID): ${id}`);
             if (this.onRefresh) this.onRefresh();
             this.startBackgroundSync();
         });
@@ -39,13 +41,17 @@ export const PeerService: IPeerService = {
 
     async validarIdentidadEnRed(idPublico: string, idPrivado: string, passwordHash: string): Promise<boolean> {
         return new Promise(async (resolve) => {
-            const probeId = `bitchat-probe-${Date.now()}`;
+            const probeId = `bc-probe-${crypto.randomUUID().substring(0, 8)}`;
             const probePeer = new Peer(probeId);
             const miCuarta = await generarCuartaCredencial(idPublico, idPrivado, passwordHash);
+            
+            const targetHashedId = await hashString(idPublico);
+            const targetAuthId = `bc-v2-${targetHashedId.substring(0, 24)}`;
+            
             let foundExisting = false;
 
             probePeer.on('open', () => {
-                const conn = probePeer.connect(`bitchat-auth-${idPublico}`);
+                const conn = probePeer.connect(targetAuthId);
                 const timeout = setTimeout(() => { if (!foundExisting) { probePeer.destroy(); resolve(true); } }, 5000);
 
                 conn.on('open', () => {
@@ -74,9 +80,11 @@ export const PeerService: IPeerService = {
 
     async conectarAContacto(idPublicoAmigo: string): Promise<void> {
         if (!this.peer) return;
-        const targetAuthId = `bitchat-auth-${idPublicoAmigo}`;
+        const hashedId = await hashString(idPublicoAmigo);
+        const targetAuthId = `bc-v2-${hashedId.substring(0, 24)}`;
+        
         const conn = this.peer.connect(targetAuthId);
-        const contactos = BitChatAuth.obtenerContactos();
+        const contactos = await BitChatAuth.obtenerContactos();
         if (!contactos[idPublicoAmigo]) { Estado.solicitudesEnviadasPendientes.add(idPublicoAmigo); }
 
         conn.on('open', async () => {
@@ -102,7 +110,7 @@ export const PeerService: IPeerService = {
         if (this.sharedKeys[idAmigo]) return this.sharedKeys[idAmigo];
         
         const misCreds = await BitChatAuth.obtenerMisCredenciales();
-        const contactos = BitChatAuth.obtenerContactos();
+        const contactos = await BitChatAuth.obtenerContactos();
         if (!misCreds || !contactos[idAmigo] || !contactos[idAmigo].publicKey) return null;
         
         try {
@@ -141,7 +149,7 @@ export const PeerService: IPeerService = {
                 }
             }
             if (paquete.tipo === 'SECURITY_ALERT') {
-                BitChatAuth.marcarContactoInseguro(paquete.idComprometido);
+                await BitChatAuth.marcarContactoInseguro(paquete.idComprometido);
                 if (this.onRefresh) this.onRefresh();
                 alert(`¡ALERTA DE SEGURIDAD! El contacto ${paquete.idComprometido} ha reportado un intento de suplantación de identidad.`);
             }
@@ -164,7 +172,7 @@ export const PeerService: IPeerService = {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
-                BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencial, false, paquete.publicKey);
+                await BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencial, false, paquete.publicKey);
                 conn.send({ 
                     tipo: 'HANDSHAKE_FINAL', 
                     miIdPublico: misCreds.idPublico, 
@@ -177,7 +185,7 @@ export const PeerService: IPeerService = {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
-                BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencialAmigo, false, paquete.publicKey);
+                await BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencialAmigo, false, paquete.publicKey);
                 this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencialAmigo);
                 this._enviarPendientes(paquete.miIdPublico, conn);
                 if (this.onRefresh) this.onRefresh();
@@ -201,7 +209,7 @@ export const PeerService: IPeerService = {
             }
             if (paquete.tipo === 'MSG_ACK') {
                 await DB.updateMessageByMsgId(paquete.msgId, { status: paquete.read ? 'read' : 'sent' });
-                const senderId = conn.peer.replace('bitchat-auth-', '').split('-')[0];
+                const senderId = conn.peer!.replace('bc-v2-', '').split('-')[0]; // Adjust for new prefix
                 if (this.onMessage) this.onMessage(senderId);
             }
             if (paquete.tipo === 'SYNC_REQUEST') {
@@ -209,15 +217,18 @@ export const PeerService: IPeerService = {
                 if (!misCreds) return;
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
                 if (paquete.cuarta === miCuarta) {
-                    const contactos = BitChatAuth.obtenerContactos();
+                    const contactos = await BitChatAuth.obtenerContactos();
                     const mensajes = await DB.getAllMessages();
                     conn.send({ tipo: 'SYNC_DATA', contactos, mensajes });
                 }
             }
             if (paquete.tipo === 'SYNC_DATA') {
-                const locales = BitChatAuth.obtenerContactos();
-                const nuevos = { ...locales, ...paquete.contactos };
-                localStorage.setItem('bitchat_auth_contacts', JSON.stringify(nuevos));
+                // Synchronization requires more complex handling for encrypted contacts store
+                // For now, we manually iterate and save them
+                for (const idPublico in paquete.contactos) {
+                    const c = paquete.contactos[idPublico];
+                    await BitChatAuth.guardarContacto(idPublico, c.tokenCuartaCredencial, c.insecure, c.publicKey);
+                }
                 await DB.importMessages(paquete.mensajes);
                 alert("Sincronización completada con éxito.");
                 location.reload();
@@ -227,9 +238,10 @@ export const PeerService: IPeerService = {
 
     async _alertarContactosDeIntentoDeSecuestro(miIdComprometido: string): Promise<void> {
         if (!this.peer) return;
-        const contactos = BitChatAuth.obtenerContactos();
+        const contactos = await BitChatAuth.obtenerContactos();
         for (const idAmigo in contactos) {
-            const targetAuthId = `bitchat-auth-${idAmigo}`;
+            const hashedId = await hashString(idAmigo);
+            const targetAuthId = `bc-v2-${hashedId.substring(0, 24)}`;
             const conn = this.peer.connect(targetAuthId);
             conn.on('open', () => {
                 conn.send({ tipo: 'SECURITY_ALERT', idComprometido: miIdComprometido });
@@ -274,7 +286,8 @@ export const PeerService: IPeerService = {
 
     async aceptarConexion(idPublicoAmigo: string): Promise<void> {
         if (!this.peer) return;
-        const targetAuthId = `bitchat-auth-${idPublicoAmigo}`;
+        const hashedId = await hashString(idPublicoAmigo);
+        const targetAuthId = `bc-v2-${hashedId.substring(0, 24)}`;
         const conn = this.peer.connect(targetAuthId);
         conn.on('open', () => { conn.send({ tipo: 'CONNECTION_ACCEPTED' }); });
         this._procesarEntrante(conn);
@@ -304,7 +317,8 @@ export const PeerService: IPeerService = {
         const info = this.conexionesP2PDirectas[idPublicoAmigo];
         if (info && info.status === 'SECURE' && sharedKey && this.peer) {
             const { ciphertext, iv } = await CryptoService.encrypt(sharedKey, texto);
-            const conn = this.peer.connect(`bitchat-auth-${idPublicoAmigo}`);
+            const hashedId = await hashString(idPublicoAmigo);
+            const conn = this.peer.connect(`bc-v2-${hashedId.substring(0, 24)}`);
             conn.on('open', () => {
                 conn.send({ 
                     tipo: 'MSG', 
@@ -326,34 +340,38 @@ export const PeerService: IPeerService = {
         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, password);
 
         return new Promise((resolve) => {
-            const probeId = `bitchat-sync-probe-${Date.now()}`;
+            const probeId = `bc-sync-probe-${crypto.randomUUID().substring(0, 8)}`;
             const probePeer = new Peer(probeId);
             let foundAny = false;
 
             probePeer.on('open', () => {
-                const targetId = `bitchat-auth-${misCreds.idPublico}`;
-                const conn = probePeer.connect(targetId);
+                const targetHashedId = hashString(misCreds.idPublico);
+                targetHashedId.then(hash => {
+                    const targetId = `bc-v2-${hash.substring(0, 24)}`;
+                    const conn = probePeer.connect(targetId);
 
-                const timeout = setTimeout(() => {
-                    if (!foundAny) { probePeer.destroy(); resolve(false); }
-                }, 8000);
+                    const timeout = setTimeout(() => {
+                        if (!foundAny) { probePeer.destroy(); resolve(false); }
+                    }, 8000);
 
-                conn.on('open', () => {
-                    foundAny = true;
-                    conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta });
-                });
+                    conn.on('open', () => {
+                        foundAny = true;
+                        conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta });
+                    });
 
-                conn.on('data', async (data: unknown) => {
-                    const paquete = data as IPaqueteData;
-                    if (paquete.tipo === 'SYNC_DATA') {
-                        const locales = BitChatAuth.obtenerContactos();
-                        const nuevos = { ...locales, ...paquete.contactos };
-                        localStorage.setItem('bitchat_auth_contacts', JSON.stringify(nuevos));
-                        await DB.importMessages(paquete.mensajes);
-                        probePeer.destroy(); resolve(true);
-                        alert("Sincronización P2P exitosa.");
-                        location.reload();
-                    }
+                    conn.on('data', async (data: unknown) => {
+                        const paquete = data as IPaqueteData;
+                        if (paquete.tipo === 'SYNC_DATA') {
+                            for (const idPublico in paquete.contactos) {
+                                const c = paquete.contactos[idPublico];
+                                await BitChatAuth.guardarContacto(idPublico, c.tokenCuartaCredencial, c.insecure, c.publicKey);
+                            }
+                            await DB.importMessages(paquete.mensajes);
+                            probePeer.destroy(); resolve(true);
+                            alert("Sincronización P2P exitosa.");
+                            location.reload();
+                        }
+                    });
                 });
             });
         });

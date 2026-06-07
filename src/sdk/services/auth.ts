@@ -1,8 +1,9 @@
 import { DB } from './db.ts';
 import { Estado } from '../models/state.ts';
-import { Credentials, ContactMap } from '../models/types.ts';
+import { Credentials, ContactMap, Contact } from '../models/types.ts';
 import { CryptoService, arrayBufferToBase64, base64ToArrayBuffer } from './crypto.ts';
 import { IBitChatAuth } from './interfaces/IAuthService.ts';
+import { VaultService } from './vault.ts';
 
 export async function hashString(str: string): Promise<string> {
     const encoder = new TextEncoder();
@@ -24,8 +25,6 @@ export async function generarQuintaId(cuartaA: string, cuartaB: string): Promise
 
 export const BitChatAuth: IBitChatAuth = {
     async guardarMisCredenciales(idPublico: string, idPrivado: string, password: string): Promise<void> {
-        const passwordHash = await hashString(password);
-        
         // 1. Salt for master key derivation
         const saltBuffer = crypto.getRandomValues(new Uint8Array(16));
         const saltBase64 = await arrayBufferToBase64(saltBuffer);
@@ -41,10 +40,14 @@ export const BitChatAuth: IBitChatAuth = {
         // 4. Encrypt Private Key
         const { ciphertext: encryptedPriv, iv: privIv } = await CryptoService.encrypt(masterKey, JSON.stringify(privateKeyJWK));
         
+        // 5. Create Auth Witness (Proof of knowledge)
+        const { ciphertext: witness, iv: witnessIv } = await CryptoService.encrypt(masterKey, "BITCHAT_IDENTITY_OK");
+
         const creds: Credentials = { 
             idPublico, 
             idPrivado, 
-            passwordHash,
+            authWitness: witness,
+            authIv: witnessIv,
             salt: saltBase64,
             publicKey: publicKeyJWK,
             encryptedPrivateKey: encryptedPriv,
@@ -64,37 +67,84 @@ export const BitChatAuth: IBitChatAuth = {
     async verificarPassword(inputPassword: string): Promise<boolean> {
         const creds = await this.obtenerMisCredenciales();
         if (!creds) return false;
-        const inputHash = await hashString(inputPassword);
-        if (inputHash !== creds.passwordHash) return false;
-        
-        // Migration: If legacy account (no salt), upgrade it
-        if (!creds.salt) {
-            console.log("[BitChat Migration] Legacy account detected, upgrading...");
+
+        // --- Migration Phase A: Legacy SHA-256 Check ---
+        if (creds.passwordHash && !creds.authWitness) {
+            const inputHash = await hashString(inputPassword);
+            if (inputHash !== creds.passwordHash) return false;
+            
+            console.log("[BitChat Migration] Upgrading legacy hash to encrypted witness...");
             await this.guardarMisCredenciales(creds.idPublico, creds.idPrivado, inputPassword);
-        } else {
-            // Derive and store AES key in state
+            return true;
+        }
+
+        // --- Secure Phase: Witness Decryption ---
+        if (!creds.salt || !creds.authWitness || !creds.authIv) return false;
+
+        try {
             const saltBuffer = await base64ToArrayBuffer(creds.salt);
-            Estado.aesKey = await CryptoService.deriveMasterKey(inputPassword, saltBuffer);
+            const masterKey = await CryptoService.deriveMasterKey(inputPassword, saltBuffer);
+            
+            const decryptedWitness = await CryptoService.decrypt(masterKey, creds.authWitness, creds.authIv);
+            if (decryptedWitness === "BITCHAT_IDENTITY_OK") {
+                Estado.aesKey = masterKey;
+                return true;
+            }
+        } catch (e) {
+            console.error('Derivation/Auth failure', e);
         }
         
-        return true;
+        return false;
     },
 
-    obtenerContactos(): ContactMap {
-        return JSON.parse(localStorage.getItem('bitchat_auth_contacts') || '{}');
+    async obtenerContactos(): Promise<ContactMap> {
+        const encryptedList = await DB.getContacts();
+        const map: ContactMap = {};
+        for (const item of encryptedList) {
+            try {
+                const idPublico = (item as any).idPublico;
+                const decryptedContact = await VaultService.decryptForMe<Contact>(item);
+                map[idPublico] = decryptedContact;
+            } catch (e) {
+                console.error("Failed to decrypt contact", e);
+            }
+        }
+        return map;
     },
 
-    guardarContacto(idPublico: string, tokenCuartaCredencial: string, insecure: boolean = false, publicKey?: JsonWebKey): void {
-        const contactos = this.obtenerContactos();
-        contactos[idPublico] = { tokenCuartaCredencial, insecure, publicKey };
-        localStorage.setItem('bitchat_auth_contacts', JSON.stringify(contactos));
+    async guardarContacto(idPublico: string, tokenCuartaCredencial: string, insecure: boolean = false, publicKey?: JsonWebKey): Promise<void> {
+        const contactData: Contact = { tokenCuartaCredencial, insecure, publicKey };
+        const encrypted = await VaultService.encryptForMe(idPublico, contactData);
+        await DB.saveContact(idPublico, encrypted);
     },
 
-    marcarContactoInseguro(idPublico: string): void {
-        const contactos = this.obtenerContactos();
+    async marcarContactoInseguro(idPublico: string): Promise<void> {
+        const contactos = await this.obtenerContactos();
         if (contactos[idPublico]) {
             contactos[idPublico].insecure = true;
-            localStorage.setItem('bitchat_auth_contacts', JSON.stringify(contactos));
+            await this.guardarContacto(idPublico, contactos[idPublico].tokenCuartaCredencial, true, contactos[idPublico].publicKey);
+        }
+    },
+
+    async eliminarContacto(idPublico: string): Promise<void> {
+        await DB.deleteContact(idPublico);
+    },
+
+    async migrarContactosSeguros(): Promise<void> {
+        const legacyJSON = localStorage.getItem('bitchat_auth_contacts');
+        if (!legacyJSON) return;
+
+        console.log("[BitChat Migration] Securing legacy contacts from localStorage...");
+        try {
+            const legacyMap: ContactMap = JSON.parse(legacyJSON);
+            for (const idPublico in legacyMap) {
+                const c = legacyMap[idPublico];
+                await this.guardarContacto(idPublico, c.tokenCuartaCredencial, c.insecure, c.publicKey);
+            }
+            localStorage.removeItem('bitchat_auth_contacts');
+            console.log("[BitChat Migration] Contacts secured successfully.");
+        } catch (e) {
+            console.error("Migration failure", e);
         }
     }
 };

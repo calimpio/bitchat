@@ -20,12 +20,18 @@ export interface IBitChatAuth {
      */
     verificarPassword(inputPassword: string): Promise<boolean>;
 
-    /** Retrieves the contact list from localStorage. */
-    obtenerContactos(): ContactMap;
+    /** Retrieves the contact list from secure storage. */
+    obtenerContactos(): Promise<ContactMap>;
 
     /** Saves or updates a contact including their E2EE Public Key. */
-    guardarContacto(idPublico: string, tokenCuartaCredencial: string, insecure?: boolean, publicKey?: JsonWebKey): void;
+    guardarContacto(idPublico: string, tokenCuartaCredencial: string, insecure?: boolean, publicKey?: JsonWebKey): Promise<void>;
 
     /** Flags a contact as insecure if an identity conflict is detected in the network. */
-    marcarContactoInseguro(idPublico: string): void;
+    marcarContactoInseguro(idPublico: string): Promise<void>;
+
+    /** Removes a contact and their associated security metadata. */
+    eliminarContacto(idPublico: string): Promise<void>;
+
+    /** Migration Protocol: Moves contacts from localStorage to encrypted IndexedDB. */
+    migrarContactosSeguros(): Promise<void>;
 }
