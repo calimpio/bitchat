@@ -8,6 +8,6 @@ Commands:
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/user-attachments/files/28670853/BitChat_v1.0.0.zip
-    InstallerSha256: d695bab14da893b83211a3cd1ec8e62e92d5fdc5de684c7ba4df2e5501c29b91
+    InstallerSha256: 67987985cce95bb46eeb39006a45360ca490d1a7ee64df1cee741fdbb9e7406d
 ManifestType: installer
 ManifestVersion: 1.6.0

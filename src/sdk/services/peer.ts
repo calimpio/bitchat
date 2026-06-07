@@ -95,12 +95,16 @@ export const PeerService: IPeerService = {
     },
 
     async conectarAContacto(idPublicoAmigo: string): Promise<void> {
-        if (!this.peer) return;
+        if (!this.peer || !this.peer.open) {
+            Debug.log("Error: El nodo no está listo para conectar. Esperando...");
+            return;
+        }
         const hashedId = await hashString(idPublicoAmigo);
         const targetAuthId = `bc-v2-${hashedId.substring(0, 24)}`;
         
-        Debug.log(`Intentando conectar a amigo: ${idPublicoAmigo} (${targetAuthId})`);
+        Debug.log(`Iniciando conexión P2P hacia: ${idPublicoAmigo} (${targetAuthId})`);
         const conn = this.peer.connect(targetAuthId);
+        
         const contactos = await BitChatAuth.obtenerContactos();
         if (!contactos[idPublicoAmigo]) { Estado.solicitudesEnviadasPendientes.add(idPublicoAmigo); }
 
@@ -108,6 +112,7 @@ export const PeerService: IPeerService = {
             Debug.log(`Conexión ABIERTA con ${targetAuthId}`);
             const misCreds = await BitChatAuth.obtenerMisCredenciales();
             if (!misCreds) return;
+
             if (contactos[idPublicoAmigo]) {
                 if (!this.conexionesP2PDirectas[idPublicoAmigo] || this.conexionesP2PDirectas[idPublicoAmigo].status !== 'SECURE') {
                     const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
@@ -133,10 +138,9 @@ export const PeerService: IPeerService = {
         });
 
         conn.on('error', (err) => {
-            Debug.log(`Error de conexión con ${idPublicoAmigo}: ${err}`);
+            Debug.log(`Fallo de conexión con ${idPublicoAmigo}: ${err}`);
         });
 
-        conn.on('data', () => { Estado.solicitudesEnviadasPendientes.delete(idPublicoAmigo); });
         this._procesarEntrante(conn);
     },
 
