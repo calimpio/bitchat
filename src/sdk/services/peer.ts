@@ -188,7 +188,11 @@ export const PeerService: IPeerService = {
                 alert(`¡ALERTA DE SEGURIDAD! El contacto ${paquete.idComprometido} ha reportado un intento de suplantación de identidad.`);
             }
             if (paquete.tipo === 'CONNECTION_REQ') {
-                await DB.addRequest({ idPublico: paquete.deIdPublico, time: Date.now() });
+                await DB.addRequest({ 
+                    idPublico: paquete.deIdPublico, 
+                    time: Date.now(),
+                    publicKey: paquete.publicKey
+                });
                 if (this.onRefresh) this.onRefresh();
             }
             if (paquete.tipo === 'CONNECTION_ACCEPTED') {
