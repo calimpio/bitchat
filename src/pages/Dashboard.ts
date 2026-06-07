@@ -144,27 +144,27 @@ export async function DashboardPage(renderApp: () => void) {
     }
 
     // --- MAIN LAYOUT ---
-    const sidebar = h('div', { className: `sidebar ${Estado.showMobileMenu ? 'active' : ''}` }, [
+    const sidebar = h('div', { className: `sidebar ${Estado.showSidebar ? 'active' : ''}` }, [
         h('div', { className: 'sidebar-header' }, [
             h('h2', { style: { color: 'var(--primary)', fontSize: '20px'} }, 'bitOS'),
-            h('button', { className: 'desktop-only btn btn-ghost', onClick: () => { Estado.showMobileMenu = false; renderApp(); } }, '✕')
+            h('button', { className: 'btn btn-ghost', style: { padding: '4px' }, onClick: () => { Estado.showSidebar = false; renderApp(); } }, '✕')
         ]),
         h('div', { className: 'sidebar-content' }, [
             h('div', { className: `nav-item ${Estado.activeApp === 'bitChat' ? 'active' : ''}`, 
-                onClick: () => { Estado.activeApp = 'bitChat'; Estado.showMobileMenu = false; renderApp(); } }, '💬 bitChat'),
+                onClick: () => { Estado.activeApp = 'bitChat'; renderApp(); } }, '💬 bitChat'),
             h('div', { className: 'nav-item', style: { opacity: 0.4 } }, '📂 bitDrive (Prox)'),
             h('div', { className: 'nav-item', style: { opacity: 0.4 } }, '📱 bitDevices (Prox)'),
         ]),
         h('div', { className: 'sidebar-footer' }, [
             h('div', { className: `nav-item ${Estado.activeApp === 'Settings' ? 'active' : ''}`, 
-                onClick: () => { Estado.activeApp = 'Settings'; Estado.showMobileMenu = false; renderApp(); } }, '⚙ Configuración'),
+                onClick: () => { Estado.activeApp = 'Settings'; renderApp(); } }, '⚙ Configuración'),
             h('div', { className: 'nav-item', style: { color: 'var(--primary)'}, onClick: () => location.reload() }, '🔓 Cerrar Terminal')
         ])
     ]);
 
     const header = h('div', { className: 'header' }, [
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, [
-            h('button', { className: 'btn-menu-mobile', onClick: () => { Estado.showMobileMenu = true; renderApp(); } }, '☰'),
+            h('button', { className: 'btn-menu-mobile', onClick: () => { Estado.showSidebar = !Estado.showSidebar; renderApp(); } }, '☰'),
             h('div', { style: { width: '10px', height: '10px', background: 'var(--success)', borderRadius: '50%'} }),
             h('div', { className: 'mobile-id-info', style: { display: 'none' } }, [
                 h('h2', { style: { fontSize: '14px'} }, `@${misCreds.idPrivado}`),
@@ -213,8 +213,8 @@ export async function DashboardPage(renderApp: () => void) {
     else if (Estado.activeApp === 'Settings') activeContent = settingsView();
     else activeContent = h('div', { style: { textAlign: 'center', marginTop: '50px', color: 'var(--text-dim)'} }, 'Próximamente...');
 
-    return h('div', { className: 'app-container fade-in' }, [
-        h('div', { className: `drawer-overlay ${Estado.showMobileMenu ? 'active' : ''}`, onClick: () => { Estado.showMobileMenu = false; renderApp(); } }),
+    return h('div', { className: `app-container fade-in ${Estado.showSidebar ? 'sidebar-open' : ''}` }, [
+        h('div', { className: `drawer-overlay ${Estado.showSidebar ? 'active' : ''}`, onClick: () => { Estado.showSidebar = false; renderApp(); } }),
         modalAdd, modalConfig,
         header,
         h('div', { className: 'main-content' }, [
