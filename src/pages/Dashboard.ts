@@ -29,10 +29,17 @@ export async function DashboardPage(renderApp: () => void) {
                             reqFingerprint ? h('span', { style: { fontSize: '12px' } }, reqFingerprint) : null
                         ]),
                         h('div', { style: { display: 'flex', gap: '8px' } }, [
-                            Button({ text: 'Aceptar', variant: 'success', className: 'btn-sm', onClick: async () => { await PeerService.aceptarConexion(r.idPublico); renderApp(); } }),
-                            Button({ text: 'X', variant: 'ghost', className: 'btn-sm', onClick: async () => { await DB.deleteRequest(r.idPublico); renderApp(); } })
-                        ])
-                    ]);
+                            Button({ text: 'Aceptar', variant: 'success', className: 'btn-sm', onClick: async () => { await PeerService.aceptarConexion(r.idPublico); updateUI(); } }),
+                            Button({ text: 'Bloquear', variant: 'primary', className: 'btn-sm', onClick: async () => { 
+                                if (confirm(`¿Bloquear permanentemente a ${r.idPublico}?`)) {
+                                    await DB.addBlock(r.idPublico);
+                                    await DB.deleteRequest(r.idPublico);
+                                    updateUI();
+                                }
+                            }}),
+                            Button({ text: 'X', variant: 'ghost', className: 'btn-sm', onClick: async () => { await PeerService.rechazarConexion(r.idPublico); renderApp(); } })
+                            ])
+                            ]);
                 }))
             ]) : null,
             h('h4', { className: 'nav-section-title' }, 'Contactos'),
@@ -111,7 +118,9 @@ export async function DashboardPage(renderApp: () => void) {
     }
 
     // --- SUB-APP: Settings ---
-    function settingsView(): HTMLElement {
+    async function settingsView(): Promise<HTMLElement> {
+        const blacklist = await DB.getBlacklist();
+
         return h('div', { style: { flex: '1', display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '500px', margin: '0 auto', width: '100%', overflowY: 'auto'} }, [
             h('h2', { style: { color: 'var(--primary)', textAlign: 'center'} }, 'bitOS Settings'),
             Card({ style: { padding: '20px'} }, [
@@ -121,6 +130,19 @@ export async function DashboardPage(renderApp: () => void) {
                     h('p', {}, `Nickname: @${misCreds.idPrivado}`),
                     h('p', { style: { color: 'var(--accent-blue)', marginTop: '5px'} }, `Huella: ${myFingerprint}`)
                 ])
+            ]),
+            Card({ style: { padding: '20px'} }, [
+                h('h4', { style: { marginBottom: '10px', color: 'var(--primary)'} }, 'Lista Negra'),
+                h('p', { style: { fontSize: '12px', color: 'var(--text-dim)', marginBottom: '10px'} }, 'Números bloqueados que no pueden enviarte solicitudes.'),
+                h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px'} }, 
+                    blacklist.length > 0 ? blacklist.map(id => h('div', { className: 'request-card', style: { padding: '8px', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'} }, [
+                        h('span', { style: { fontSize: '13px'} }, id),
+                        Button({ text: 'Desbloquear', variant: 'ghost', className: 'btn-sm', onClick: async () => {
+                            await DB.unblock(id);
+                            updateUI();
+                        }})
+                    ])) : [h('p', { style: { fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic'} }, 'Ningún número bloqueado')]
+                )
             ]),
             Card({ style: { padding: '20px'} }, [
                 h('h4', { style: { marginBottom: '10px', color: 'var(--secondary)'} }, 'Sincronización'),

@@ -45,6 +45,7 @@ export type TipoPaquete =
     | 'SECURITY_ALERT' 
     | 'CONNECTION_REQ' 
     | 'CONNECTION_ACCEPTED' 
+    | 'CONNECTION_REJECTED'
     | 'HANDSHAKE_START' 
     | 'HANDSHAKE_FINAL' 
     | 'MSG' 
@@ -128,6 +129,11 @@ export interface IPaqueteConnectionAccepted extends IPaqueteBase {
     tipo: 'CONNECTION_ACCEPTED';
 }
 
+export interface IPaqueteConnectionRejected extends IPaqueteBase {
+    tipo: 'CONNECTION_REJECTED';
+    deIdPublico: string;
+}
+
 export type IPaqueteData = 
     | IPaqueteIdentityProbe 
     | IPaqueteIdentityMatch
@@ -135,6 +141,7 @@ export type IPaqueteData =
     | IPaqueteSecurityAlert 
     | IPaqueteConnectionReq 
     | IPaqueteConnectionAccepted
+    | IPaqueteConnectionRejected
     | IPaqueteHandshakeStart 
     | IPaqueteHandshakeFinal 
     | IPaqueteMsg 

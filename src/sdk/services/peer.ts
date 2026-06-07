@@ -174,7 +174,15 @@ export const PeerService: IPeerService = {
     _procesarEntrante(conn: DataConnection): void {
         conn.on('data', async (data: unknown) => {
             const paquete = data as IPaqueteData;
-            Debug.log(`Recibido: ${paquete.tipo} de ${paquete.miIdPublico || paquete.deIdPublico || 'unknown'}`);
+
+            // SECURITY: Blacklist check
+            const senderId = paquete.tipo === 'CONNECTION_REQ' ? paquete.deIdPublico : conn.peer!.replace('bc-v2-', '').split('-')[0];
+            if (await DB.isBlocked(senderId)) {
+                Debug.log(`[Blacklist] Ignorando paquete de ID bloqueado: ${senderId}`);
+                return;
+            }
+
+            Debug.log(`<<< RECIBIDO ${paquete.tipo} desde ${conn.peer}`);
             
             if (paquete.tipo === 'IDENTITY_PROBE') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
@@ -197,6 +205,11 @@ export const PeerService: IPeerService = {
                     time: Date.now(),
                     publicKey: paquete.publicKey
                 });
+                if (this.onRefresh) this.onRefresh();
+            }
+            if (paquete.tipo === 'CONNECTION_REJECTED') {
+                alert(`Tu solicitud de conexión a ${paquete.deIdPublico} ha sido rechazada.`);
+                Estado.solicitudesEnviadasPendientes.delete(paquete.deIdPublico);
                 if (this.onRefresh) this.onRefresh();
             }
             if (paquete.tipo === 'CONNECTION_ACCEPTED') {
@@ -333,6 +346,27 @@ export const PeerService: IPeerService = {
         const conn = this.peer.connect(targetAuthId);
         conn.on('open', () => { conn.send({ tipo: 'CONNECTION_ACCEPTED' }); });
         this._procesarEntrante(conn);
+        await DB.deleteRequest(idPublicoAmigo);
+        if (this.onRefresh) this.onRefresh();
+    },
+
+    async rechazarConexion(idPublicoAmigo: string): Promise<void> {
+        if (!this.peer) return;
+        const hashedId = await hashString(idPublicoAmigo);
+        const targetAuthId = `bc-v2-${hashedId.substring(0, 24)}`;
+        const conn = this.peer.connect(targetAuthId);
+        
+        conn.on('open', async () => {
+            const misCreds = await BitChatAuth.obtenerMisCredenciales();
+            if (misCreds) {
+                conn.send({ 
+                    tipo: 'CONNECTION_REJECTED', 
+                    deIdPublico: misCreds.idPublico 
+                });
+            }
+            setTimeout(() => conn.close(), 1000);
+        });
+
         await DB.deleteRequest(idPublicoAmigo);
         if (this.onRefresh) this.onRefresh();
     },

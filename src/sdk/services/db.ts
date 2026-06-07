@@ -9,7 +9,7 @@ export const DB: IDBService = {
 
     init(): Promise<void> {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('bitchat_db', 6);
+            const req = indexedDB.open('bitchat_db', 7);
             req.onupgradeneeded = (e) => {
                 const db = (e.target as IDBOpenDBRequest).result;
                 if (!db.objectStoreNames.contains('messages')) {
@@ -33,12 +33,55 @@ export const DB: IDBService = {
                 if (!db.objectStoreNames.contains('contacts')) {
                     db.createObjectStore('contacts', { keyPath: 'idPublico' });
                 }
+                if (!db.objectStoreNames.contains('blacklist')) {
+                    db.createObjectStore('blacklist', { keyPath: 'idPublico' });
+                }
             };
             req.onsuccess = (e) => {
                 this.db = (e.target as IDBOpenDBRequest).result;
                 resolve();
             };
             req.onerror = () => reject(req.error);
+        });
+    },
+
+    // ... (rest of methods)
+
+    async addBlock(idPublico: string): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('blacklist', 'readwrite');
+            const store = tx.objectStore('blacklist');
+            store.put({ idPublico, time: Date.now() }).onsuccess = () => resolve();
+        });
+    },
+
+    async getBlacklist(): Promise<string[]> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve([]);
+            const tx = this.db.transaction('blacklist', 'readonly');
+            const store = tx.objectStore('blacklist');
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result.map((item: any) => item.idPublico));
+        });
+    },
+
+    async unblock(idPublico: string): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('blacklist', 'readwrite');
+            const store = tx.objectStore('blacklist');
+            store.delete(idPublico).onsuccess = () => resolve();
+        });
+    },
+
+    async isBlocked(idPublico: string): Promise<boolean> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve(false);
+            const tx = this.db.transaction('blacklist', 'readonly');
+            const store = tx.objectStore('blacklist');
+            const req = store.get(idPublico);
+            req.onsuccess = () => resolve(!!req.result);
         });
     },
 

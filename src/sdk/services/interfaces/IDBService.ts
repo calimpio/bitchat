@@ -69,6 +69,18 @@ export interface IDBService {
     /** Removes a contact from the database. */
     deleteContact(idPublico: string): Promise<void>;
 
+    /** Adds a Public ID to the blacklist to ignore future requests. */
+    addBlock(idPublico: string): Promise<void>;
+
+    /** Retrieves the list of all blocked Public IDs. */
+    getBlacklist(): Promise<string[]>;
+
+    /** Removes an ID from the blacklist. */
+    unblock(idPublico: string): Promise<void>;
+
+    /** Checks if a specific ID is in the blacklist. */
+    isBlocked(idPublico: string): Promise<boolean>;
+
     /** 
      * Migration Protocol: Iterates through the database and encrypts any plain-text messages 
      * from legacy versions using the Master Password.

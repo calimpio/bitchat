@@ -53,6 +53,9 @@ export interface IPeerService {
     /** Formally accepts a pending connection request and starts the handshake. */
     aceptarConexion(idPublicoAmigo: string): Promise<void>;
 
+    /** Formally rejects a pending connection request and notifies the sender. */
+    rechazarConexion(idPublicoAmigo: string): Promise<void>;
+
     /** Encrypts (E2EE) and sends a text message to a contact. */
     enviarMensaje(idPublicoAmigo: string, texto: string): Promise<void>;
 
