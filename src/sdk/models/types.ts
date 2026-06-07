@@ -35,6 +35,7 @@ export interface Message {
 export interface RequestRecord {
     idPublico: string;
     time: number;
+    publicKey?: JsonWebKey;
 }
 
 export type TipoPaquete = 
@@ -71,6 +72,7 @@ export interface IPaqueteSecurityAlert extends IPaqueteBase {
 export interface IPaqueteConnectionReq extends IPaqueteBase {
     tipo: 'CONNECTION_REQ';
     deIdPublico: string;
+    publicKey: JsonWebKey;
 }
 
 export interface IPaqueteHandshakeStart extends IPaqueteBase {

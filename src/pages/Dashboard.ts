@@ -50,13 +50,19 @@ export async function DashboardPage(renderApp: () => void) {
         Button({ text: '+ Añadir Nodo', onClick: () => { Estado.showModalAdd = true; renderApp(); } }),
         requests.length > 0 ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, [
             h('h4', { style: { fontSize: '12px', color: 'var(--primary)', marginTop: '10px' } }, 'Solicitudes Pendientes'),
-            ...requests.map(r => h('div', { className: 'request-card' }, [
-                h('p', { style: { fontSize: '14px', fontWeight: '700' } }, r.idPublico),
-                h('div', { style: { display: 'flex', gap: '8px' } }, [
-                    Button({ text: 'Aceptar', variant: 'success', className: 'btn-sm', onClick: async () => { await PeerService.aceptarConexion(r.idPublico); renderApp(); } }),
-                    Button({ text: 'X', variant: 'ghost', className: 'btn-sm', onClick: async () => { await DB.deleteRequest(r.idPublico); renderApp(); } })
-                ])
-            ]))
+            ...await Promise.all(requests.map(async r => {
+                const reqFingerprint = r.publicKey ? await CryptoService.getFingerprint(r.publicKey) : '';
+                return h('div', { className: 'request-card' }, [
+                    h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
+                        h('p', { style: { fontSize: '14px', fontWeight: '700' } }, r.idPublico),
+                        reqFingerprint ? h('span', { style: { fontSize: '12px', letterSpacing: '1px' }, title: 'Huella Digital del Remitente' }, reqFingerprint) : null
+                    ]),
+                    h('div', { style: { display: 'flex', gap: '8px' } }, [
+                        Button({ text: 'Aceptar', variant: 'success', className: 'btn-sm', onClick: async () => { await PeerService.aceptarConexion(r.idPublico); renderApp(); } }),
+                        Button({ text: 'X', variant: 'ghost', className: 'btn-sm', onClick: async () => { await DB.deleteRequest(r.idPublico); renderApp(); } })
+                    ])
+                ]);
+            }))
         ]) : null,
         h('h4', { style: { fontSize: '12px', color: 'var(--text-dim)', marginTop: '10px' } }, 'Contactos'),
         h('div', { id: 'contact-list', style: { display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto', flex: '1' } }, [

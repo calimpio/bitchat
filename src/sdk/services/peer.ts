@@ -124,7 +124,11 @@ export const PeerService: IPeerService = {
                 }
             } else { 
                 Debug.log(`Enviando CONNECTION_REQ a ${idPublicoAmigo}`);
-                conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico }); 
+                conn.send({ 
+                    tipo: 'CONNECTION_REQ', 
+                    deIdPublico: misCreds.idPublico,
+                    publicKey: misCreds.publicKey
+                }); 
             }
         });
 
