@@ -34,14 +34,19 @@ export async function DashboardPage(renderApp: () => void) {
 
     const header = h('div', { className: 'header' }, [
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } }, [
+            h('button', { className: 'btn-menu-mobile', onClick: () => { Estado.showMobileMenu = true; renderApp(); } }, '☰'),
             h('div', { style: { width: '10px', height: '10px', background: 'var(--success)', borderRadius: '50%', boxShadow: '0 0 8px var(--success)' } }),
-            h('h2', { style: { fontSize: '18px', fontWeight: '700' } }, `@${misCreds.idPrivado}`),
-            h('div', { style: { display: 'flex', flexDirection: 'column'} }, [
+            h('div', { className: 'mobile-id-info', style: { display: 'none' } }, [
+                h('h2', { style: { fontSize: '14px', fontWeight: '700' } }, `@${misCreds.idPrivado}`),
+                h('span', { style: { fontSize: '9px', color: 'var(--accent-blue)', letterSpacing: '0.5px'} }, myFingerprint)
+            ]),
+            h('h2', { className: 'desktop-only', style: { fontSize: '18px', fontWeight: '700' } }, `@${misCreds.idPrivado}`),
+            h('div', { className: 'desktop-only', style: { display: 'flex', flexDirection: 'column'} }, [
                 h('span', { style: { fontSize: '10px', color: 'var(--text-dim)' } }, `ID: ${misCreds.idPublico}`),
                 h('span', { style: { fontSize: '10px', color: 'var(--accent-blue)', letterSpacing: '1px'} }, `Mi Huella: ${myFingerprint}`)
             ])
         ]),
-        h('div', { style: { display: 'flex', gap: '12px' } }, [
+        h('div', { className: 'desktop-only', style: { display: 'flex', gap: '12px' } }, [
             Button({ text: '⚙ Configuración', variant: 'ghost', style: { padding: '6px 12px' }, onClick: () => { Estado.showModalConfig = true; renderApp(); } }),
             Button({ text: 'Cerrar Terminal', variant: 'ghost', style: { padding: '6px 12px' }, onClick: () => location.reload() })
         ])
@@ -50,8 +55,8 @@ export async function DashboardPage(renderApp: () => void) {
     const requests = await DB.getRequests();
     const allContactos = await BitChatAuth.obtenerContactos();
     
-    const sidebar = h('div', { id: 'sidebar', className: `sidebar ${!Estado.mostrarChatMobile ? 'active' : ''}` }, [
-        Button({ text: '+ Añadir Nodo', onClick: () => { Estado.showModalAdd = true; renderApp(); } }),
+    const sidebar = h('div', { id: 'sidebar', className: `sidebar ${(!Estado.mostrarChatMobile || Estado.showMobileMenu) ? 'active' : ''}` }, [
+        Button({ text: '+ Añadir Nodo', onClick: () => { Estado.showModalAdd = true; Estado.showMobileMenu = false; renderApp(); } }),
         requests.length > 0 ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px' } }, [
             h('h4', { style: { fontSize: '12px', color: 'var(--primary)', marginTop: '10px' } }, 'Solicitudes Pendientes'),
             ...await Promise.all(requests.map(async r => {
@@ -75,7 +80,7 @@ export async function DashboardPage(renderApp: () => void) {
                 const c = allContactos[cel];
                 return h('div', { 
                     className: `user-card ${Estado.chatConIdPublico === cel ? 'active' : ''}`,
-                    onClick: () => { Estado.chatConIdPublico = cel; Estado.mostrarChatMobile = true; renderApp(); }
+                    onClick: () => { Estado.chatConIdPublico = cel; Estado.mostrarChatMobile = true; Estado.showMobileMenu = false; renderApp(); }
                 }, [
                     h('div', {}, [
                         h('p', { style: { fontWeight: '700', fontSize: '14px', color: c.insecure ? 'var(--primary)' : 'inherit' } }, cel),
@@ -84,6 +89,10 @@ export async function DashboardPage(renderApp: () => void) {
                     h('span', { className: `status-badge ${c.insecure ? 'status-insecure' : (isSecure ? 'status-online' : 'status-offline')}` }, c.insecure ? 'INSECURE' : (isSecure ? 'SECURE' : 'LINK'))
                 ]);
             })
+        ]),
+        h('div', { className: 'sidebar-footer' }, [
+            Button({ text: '⚙ Configuración', variant: 'ghost', onClick: () => { Estado.showModalConfig = true; Estado.showMobileMenu = false; renderApp(); } }),
+            Button({ text: 'Cerrar Terminal', variant: 'ghost', onClick: () => location.reload() })
         ])
     ]);
 
@@ -209,6 +218,7 @@ export async function DashboardPage(renderApp: () => void) {
     }, 0);
 
     return h('div', { className: 'app-container fade-in' }, [
+        h('div', { className: `drawer-overlay ${Estado.showMobileMenu ? 'active' : ''}`, onClick: () => { Estado.showMobileMenu = false; renderApp(); } }),
         modalAdd, 
         modalConfig, 
         modalAccount, 
