@@ -2,6 +2,7 @@ import { Message, Credentials } from './types.ts';
 
 export interface AppState {
     pantalla: 'AUTH' | 'AUTH_LOGIN' | 'DASHBOARD' | 'TERMS';
+    activeApp: 'bitChat' | 'bitDrive' | 'bitDevices' | 'Settings';
     error: string;
     chatConIdPublico: string | null;
     historiales: Record<string, Message[]>;
@@ -18,6 +19,7 @@ export interface AppState {
 
 export const Estado: AppState = {
     pantalla: 'AUTH', 
+    activeApp: 'bitChat',
     error: '',
     chatConIdPublico: null,
     historiales: {},
