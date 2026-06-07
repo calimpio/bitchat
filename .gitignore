@@ -24,6 +24,7 @@ desktop.ini
 *.log
 
 # Winget / Build outputs
+bitchat.html
 dist/
 publish/
 publish_64/
