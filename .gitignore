@@ -24,6 +24,7 @@ desktop.ini
 *.log
 
 # Winget / Build outputs
+dist/
 publish/
 publish_64/
 windows/www/
