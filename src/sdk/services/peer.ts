@@ -84,6 +84,7 @@ export const PeerService: IPeerService = {
 
     async conectarAContacto(idPublicoAmigo: string, huellaEsperada?: string): Promise<void> {
         if (!this.peer || !this.peer.open) {
+            alert("Error: El nodo local no está listo (Peer no abierto).");
             return;
         }
         const hashedId = await hashString(idPublicoAmigo);
@@ -117,10 +118,13 @@ export const PeerService: IPeerService = {
                     publicKey: misCreds.publicKey!,
                     huellaDestino: huellaEsperada
                 }); 
+                alert(`Solicitud enviada a ${idPublicoAmigo}. Esperando respuesta...`);
             }
         });
 
-        conn.on('error', (err) => {});
+        conn.on('error', (err) => {
+            alert(`Error de conexión con ${idPublicoAmigo}: ${JSON.stringify(err)}`);
+        });
         this._procesarEntrante(conn);
     },
 
