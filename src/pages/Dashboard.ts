@@ -9,7 +9,7 @@ export async function DashboardPage(renderApp: () => void) {
     if (!Estado.me) return h('div', {}, 'Error: No credentials');
 
     const misCreds = Estado.me;
-    const myFingerprint = await CryptoService.getFingerprint(misCreds.publicKey);
+    const myFingerprint = misCreds.publicKey ? await CryptoService.getFingerprint(misCreds.publicKey) : '';
 
     const modalAdd = Modal({
         id: 'modal-add',
