@@ -55,7 +55,7 @@ export function AuthPage(renderApp: () => void) {
                                 renderApp(); 
                                 return; 
                             }
-                            Estado.masterPassword = pass as any;
+                            Estado.masterPassword = pass;
                             
                             // 🚀 Run Migration Protocol
                             await DB.migratePlainMessages();

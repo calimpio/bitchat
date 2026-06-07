@@ -2,6 +2,7 @@ import { DB } from './db.ts';
 import { Estado } from '../models/state.ts';
 import { Credentials, ContactMap } from '../models/types.ts';
 import { CryptoService, arrayBufferToBase64, base64ToArrayBuffer } from './crypto.ts';
+import { IBitChatAuth } from './interfaces/IAuthService.ts';
 
 export async function hashString(str: string): Promise<string> {
     const encoder = new TextEncoder();
@@ -21,7 +22,7 @@ export async function generarQuintaId(cuartaA: string, cuartaB: string): Promise
     return hash.substring(0, 10);
 }
 
-export const BitChatAuth = {
+export const BitChatAuth: IBitChatAuth = {
     async guardarMisCredenciales(idPublico: string, idPrivado: string, password: string): Promise<void> {
         const passwordHash = await hashString(password);
         

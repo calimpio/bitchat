@@ -1,11 +1,11 @@
-import { h } from '../../utils/dom.ts';
+import { h, DOMChild } from '../../utils/dom.ts';
 import { Card } from './Card.ts';
 
 interface ModalProps {
     id?: string;
     active: boolean;
     title: string;
-    children: any[];
+    children: DOMChild[];
 }
 
 export function Modal({ id, active, title, children }: ModalProps) {

@@ -17,8 +17,8 @@ export async function DashboardPage(renderApp: () => void) {
         children: [
             Input({ id: 'modal-add-id', placeholder: 'Número de Celular' }),
             h('div', { style: { display: 'flex', gap: '12px', marginTop: '10px' } }, [
-                Button({ text: 'Cancelar', variant: 'ghost', style: { flex: 1 }, onClick: () => { Estado.showModalAdd = false; renderApp(); } }),
-                Button({ text: 'Enlazar', style: { flex: 1 }, onClick: () => {
+                Button({ text: 'Cancelar', variant: 'ghost', style: { flex: '1' }, onClick: () => { Estado.showModalAdd = false; renderApp(); } }),
+                Button({ text: 'Enlazar', style: { flex: '1' }, onClick: () => {
                     const input = document.getElementById('modal-add-id') as HTMLInputElement;
                     const id = input.value.trim();
                     if (id) { 
@@ -83,7 +83,7 @@ export async function DashboardPage(renderApp: () => void) {
         id: 'chat-area', 
         className: `chat-area ${(Estado.mostrarChatMobile || !isMobile) && currentContact ? 'active' : ''}` 
     }, [
-        Card({ style: { flex: 1, padding: '20px' } }, [
+        Card({ style: { flex: '1', padding: '20px' } }, [
             h('div', { style: { marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
                 h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, [
                     h('button', { className: 'btn-back-mobile', onClick: () => { Estado.mostrarChatMobile = false; renderApp(); } }, '←'),
@@ -93,9 +93,9 @@ export async function DashboardPage(renderApp: () => void) {
                     onClick: () => { Estado.showModalConfig = true; renderApp(); }
                 }, '⚙')
             ]),
-            h('div', { id: 'chat-flow', style: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' } }),
+            h('div', { id: 'chat-flow', style: { flex: '1', overflowY: 'auto', display: 'flex', flexDirection: 'column' } }),
             h('div', { style: { marginTop: '20px', display: 'flex', gap: '12px' } }, [
-                Input({ id: 'f-msg', style: { flex: 1 }, placeholder: 'Escribir comando de mensaje...' }),
+                Input({ id: 'f-msg', style: { flex: '1' }, placeholder: 'Escribir comando de mensaje...' }),
                 Button({ text: 'Enviar', variant: 'success', onClick: async () => {
                     const el = document.getElementById('f-msg') as HTMLInputElement; 
                     const txt = el.value.trim();
@@ -114,8 +114,8 @@ export async function DashboardPage(renderApp: () => void) {
         children: [
             h('p', { style: { fontSize: '14px', color: 'var(--text-dim)' } }, '¿Estás seguro de que deseas eliminar este chat y todo su historial? Esta acción es irreversible.'),
             h('div', { style: { display: 'flex', gap: '12px', marginTop: '10px' } }, [
-                Button({ text: 'Cerrar', variant: 'ghost', style: { flex: 1 }, onClick: () => { Estado.showModalConfig = false; renderApp(); } }),
-                Button({ text: 'Eliminar Chat', style: { flex: 1 }, onClick: async () => {
+                Button({ text: 'Cerrar', variant: 'ghost', style: { flex: '1' }, onClick: () => { Estado.showModalConfig = false; renderApp(); } }),
+                Button({ text: 'Eliminar Chat', style: { flex: '1' }, onClick: async () => {
                     if (Estado.chatConIdPublico) {
                         await DB.deleteChat(Estado.chatConIdPublico);
                         const contactos = BitChatAuth.obtenerContactos(); 
@@ -150,8 +150,8 @@ export async function DashboardPage(renderApp: () => void) {
                 ])
             ]),
             h('div', { style: { display: 'flex', gap: '12px', marginTop: '20px' } }, [
-                Button({ text: 'Cerrar', variant: 'ghost', style: { flex: 1 }, onClick: () => { Estado.showModalConfig = false; renderApp(); } }),
-                Button({ text: 'Borrar Cuenta', style: { flex: 1 }, onClick: async () => {
+                Button({ text: 'Cerrar', variant: 'ghost', style: { flex: '1' }, onClick: () => { Estado.showModalConfig = false; renderApp(); } }),
+                Button({ text: 'Borrar Cuenta', style: { flex: '1' }, onClick: async () => {
                     if (confirm("¿Estás ABSOLUTAMENTE seguro? Se borrará TODO.")) {
                         if (DB.db) DB.db.close();
                         const req = indexedDB.deleteDatabase('bitchat_db');

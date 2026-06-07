@@ -1,5 +1,5 @@
 import { h } from '../utils/dom.ts';
-import { Estado } from '../sdk/index.ts';
+import { Estado, AppState } from '../sdk/index.ts';
 import { Card } from '../components/ui/Card.ts';
 import { Button } from '../components/ui/Button.ts';
 
@@ -38,7 +38,7 @@ SOFTWARE.`),
                 text: 'Volver', 
                 variant: 'ghost', 
                 onClick: () => { 
-                    Estado.pantalla = (Estado.lastPantalla as any) || 'AUTH';
+                    Estado.pantalla = (Estado.lastPantalla as AppState['pantalla']) || 'AUTH';
                     renderApp(); 
                 } 
             })

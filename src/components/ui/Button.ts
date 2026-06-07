@@ -5,7 +5,7 @@ interface ButtonProps {
     onClick: () => void;
     variant?: 'primary' | 'success' | 'ghost';
     className?: string;
-    style?: any;
+    style?: Partial<CSSStyleDeclaration>;
     id?: string;
     disabled?: boolean;
 }

@@ -39,6 +39,15 @@ Este documento detalla el progreso del desarrollo de BitChat y las metas futuras
 - [ ] **Indicadores de Escritura**: Visualización en tiempo real cuando el contacto está escribiendo.
 
 ### 🌐 Ecosistema
+- [ ] **bitDevices**: Gestión y orquestación de terminales personales:
+    - [ ] **Inventario de Nodos**: Visualización de todos los dispositivos vinculados a la misma identidad.
+    - [ ] **Sincronización en Tiempo Real**: Mantenimiento automático de estados y mensajes entre dispositivos online.
+    - [ ] **Control Granular**: Capacidad de seleccionar qué dispositivos específicos deben sincronizarse y cuáles deben permanecer aislados o con acceso restringido.
+- [ ] **bitDrive**: Sistema de almacenamiento de archivos soberano integrado:
+    - [ ] **Almacenamiento Privado**: Espacio seguro para archivos personales cifrados localmente.
+    - [ ] **Sincronización Multi-Dispositivo**: Transferencia P2P de archivos entre terminales del mismo dueño.
+    - [ ] **Control de Repositorios**: Capacidad de seleccionar qué repositorios o carpetas específicas se comparten con qué dispositivos, permitiendo un control total sobre la distribución de datos.
+    - [ ] **Versionado y Ramas**: Sistema de control de versiones tipo "Git" para archivos, con soporte para ramas y estados históricos.
 - [ ] **Dockerización**: Contenedor para facilitar el auto-alojamiento de la versión web.
 - [ ] **App Móvil Nativa**: Exploración de portabilidad a Android/iOS usando Capacitor o similar.
 

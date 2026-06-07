@@ -4,16 +4,16 @@ import { BitChatAuth, generarCuartaCredencial, generarQuintaId } from './auth.ts
 import { Estado } from '../models/state.ts';
 import { IPaqueteData } from '../models/types.ts';
 import { CryptoService } from './crypto.ts';
+import { IPeerService } from './interfaces/IPeerService.ts';
 
 const Debug = { log(msg: string) { console.log(`[BitChat Debug] [${new Date().toLocaleTimeString()}] ${msg}`); } };
 
-export const PeerService = {
-    peer: null as Peer | null,
-    conexionesP2PDirectas: {} as Record<string, { channelId: string, status: string }>,
-    sharedKeys: {} as Record<string, CryptoKey>, // Cache for session shared secrets
-    syncInterval: null as number | null,
-    onRefresh: null as (() => void) | null,
-    onMessage: null as ((chatId: string) => void) | null,
+export const PeerService: IPeerService = {
+    peer: null,
+    conexionesP2PDirectas: {},
+    sharedKeys: {}, // Cache for session shared secrets
+    onRefresh: null,
+    onMessage: null,
 
     async inicializarNodo(idPublico: string): Promise<void> {
         let myAuthId = `bitchat-auth-${idPublico}`;
@@ -26,7 +26,7 @@ export const PeerService = {
             this.startBackgroundSync();
         });
 
-        this.peer.on('error', (err: any) => {
+        this.peer.on('error', (err: { type: string }) => {
             if (err.type === 'unavailable-id') {
                 const suffix = Math.random().toString(36).substring(7);
                 this.inicializarNodo(`${idPublico}-${suffix}`);
@@ -343,7 +343,8 @@ export const PeerService = {
                     conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta });
                 });
 
-                conn.on('data', async (paquete: any) => {
+                conn.on('data', async (data: unknown) => {
+                    const paquete = data as IPaqueteData;
                     if (paquete.tipo === 'SYNC_DATA') {
                         const locales = BitChatAuth.obtenerContactos();
                         const nuevos = { ...locales, ...paquete.contactos };

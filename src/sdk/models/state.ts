@@ -5,7 +5,7 @@ export interface AppState {
     error: string;
     chatConIdPublico: string | null;
     historiales: Record<string, Message[]>;
-    masterPassword: '';
+    masterPassword: string;
     showModalAdd: boolean;
     showModalConfig: boolean;
     lastPantalla: string | null;

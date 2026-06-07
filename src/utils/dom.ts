@@ -1,23 +1,47 @@
-export function h(tag: string, props: any = {}, children: any = []): HTMLElement {
+export type DOMChild = string | number | HTMLElement | null | undefined | false;
+
+export function h(
+    tag: string, 
+    props: Record<string, unknown> | DOMChild | DOMChild[] = {}, 
+    children: DOMChild | DOMChild[] = []
+): HTMLElement {
     const el = document.createElement(tag);
-    if (typeof props === 'string' || Array.isArray(props) || props instanceof HTMLElement) {
-        children = props as any;
-        props = {};
+    
+    let finalProps: Record<string, unknown> = {};
+    let finalChildren: DOMChild[] = [];
+
+    if (
+        typeof props === 'string' || 
+        typeof props === 'number' || 
+        props instanceof HTMLElement || 
+        Array.isArray(props) ||
+        props === null ||
+        props === undefined ||
+        props === false
+    ) {
+        finalChildren = Array.isArray(props) ? props : [props as DOMChild];
+        finalProps = {};
+    } else {
+        finalProps = props as Record<string, unknown>;
+        finalChildren = Array.isArray(children) ? children : [children];
     }
-    Object.keys(props).forEach(key => {
-        if (props[key] === undefined) return;
-        if (key === 'style' && typeof props[key] === 'object') {
-            Object.assign(el.style, props[key]);
+
+    Object.keys(finalProps).forEach(key => {
+        const value = finalProps[key];
+        if (value === undefined) return;
+        
+        if (key === 'style' && typeof value === 'object' && value !== null) {
+            Object.assign(el.style, value);
         } else if (key === 'className') {
-            el.className = props[key];
-        } else if (key.startsWith('on') && typeof props[key] === 'function') {
-            el.addEventListener(key.substring(2).toLowerCase(), props[key]);
+            el.className = value as string;
+        } else if (key.startsWith('on') && typeof value === 'function') {
+            el.addEventListener(key.substring(2).toLowerCase(), value as EventListener);
         } else {
-            (el as any)[key] = props[key];
+            (el as any)[key] = value; // Still using 'any' here as a bridge to DOM properties
         }
     });
-    const childrenArray = Array.isArray(children) ? children : [children];
-    childrenArray.forEach(child => {
+
+    finalChildren.forEach(child => {
         if (child === null || child === undefined || child === false) return;
         if (typeof child === 'string' || typeof child === 'number') {
             el.appendChild(document.createTextNode(child.toString()));
@@ -25,5 +49,6 @@ export function h(tag: string, props: any = {}, children: any = []): HTMLElement
             el.appendChild(child);
         }
     });
+    
     return el;
 }

@@ -1,9 +1,10 @@
 import { Message, RequestRecord, Credentials } from '../models/types.ts';
 import { Estado } from '../models/state.ts';
 import { CryptoService } from './crypto.ts';
+import { IDBService } from './interfaces/IDBService.ts';
 
-export const DB = {
-    db: null as IDBDatabase | null,
+export const DB: IDBService = {
+    db: null,
 
     init(): Promise<void> {
         return new Promise((resolve, reject) => {
