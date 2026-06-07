@@ -56,7 +56,11 @@ export async function DashboardPage(renderApp: () => void) {
             Card({ style: { flex: '1', padding: '15px' } }, [
                 h('div', { style: { borderBottom: '1px solid var(--border)', paddingBottom: '10px', marginBottom: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' } }, [
                     h('div', { style: { display: 'flex', alignItems: 'center', gap: '10px' } }, [
-                        h('button', { className: 'btn-back-mobile', onClick: () => { Estado.mostrarChatMobile = false; renderApp(); } }, '←'),
+                        h('button', { className: 'btn-back-mobile', onClick: () => { 
+                            Estado.chatConIdPublico = null;
+                            Estado.mostrarChatMobile = false; 
+                            renderApp(); 
+                        } }, '←'),
                         h('div', {}, [
                             h('h3', { style: { fontSize: '16px'} }, currentContact || 'Selecciona un chat'),
                             currentContact && allContactos[currentContact]?.publicKey ? h('p', { style: { fontSize: '9px', color: 'var(--accent-blue)', letterSpacing: '1px'} }, 
