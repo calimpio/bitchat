@@ -3,12 +3,14 @@ import { DB } from './db.ts';
 import { BitChatAuth, generarCuartaCredencial, generarQuintaId } from './auth.ts';
 import { Estado } from '../models/state.ts';
 import { IPaqueteData } from '../models/types.ts';
+import { CryptoService } from './crypto.ts';
 
 const Debug = { log(msg: string) { console.log(`[BitChat Debug] [${new Date().toLocaleTimeString()}] ${msg}`); } };
 
 export const PeerService = {
     peer: null as Peer | null,
     conexionesP2PDirectas: {} as Record<string, { channelId: string, status: string }>,
+    sharedKeys: {} as Record<string, CryptoKey>, // Cache for session shared secrets
     syncInterval: null as number | null,
     onRefresh: null as (() => void) | null,
     onMessage: null as ((chatId: string) => void) | null,
@@ -83,12 +85,44 @@ export const PeerService = {
             if (contactos[idPublicoAmigo]) {
                 if (!this.conexionesP2PDirectas[idPublicoAmigo] || this.conexionesP2PDirectas[idPublicoAmigo].status !== 'SECURE') {
                     const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
-                    conn.send({ tipo: 'HANDSHAKE_START', miIdPublico: misCreds.idPublico, cuartaCredencial: miCuarta });
+                    conn.send({ 
+                        tipo: 'HANDSHAKE_START', 
+                        miIdPublico: misCreds.idPublico, 
+                        cuartaCredencial: miCuarta,
+                        publicKey: misCreds.publicKey
+                    });
                 } else { this._enviarPendientes(idPublicoAmigo, conn); }
             } else { conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico }); }
         });
         conn.on('data', () => { Estado.solicitudesEnviadasPendientes.delete(idPublicoAmigo); });
         this._procesarEntrante(conn);
+    },
+
+    async _getSharedKey(idAmigo: string): Promise<CryptoKey | null> {
+        if (this.sharedKeys[idAmigo]) return this.sharedKeys[idAmigo];
+        
+        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const contactos = BitChatAuth.obtenerContactos();
+        if (!misCreds || !contactos[idAmigo] || !contactos[idAmigo].publicKey) return null;
+        
+        try {
+            // 1. Get my private key (decrypt it first)
+            if (!Estado.aesKey || !misCreds.encryptedPrivateKey || !misCreds.privateKeyIv) return null;
+            const privKeyJWKJson = await CryptoService.decrypt(Estado.aesKey, misCreds.encryptedPrivateKey, misCreds.privateKeyIv);
+            const privKeyJWK = JSON.parse(privKeyJWKJson);
+            const myPrivKey = await crypto.subtle.importKey('jwk', privKeyJWK, { name: 'ECDH', namedCurve: 'P-384' }, true, ['deriveKey']);
+            
+            // 2. Import friend's public key
+            const friendPubKey = await CryptoService.importPublicECDHKey(contactos[idAmigo].publicKey!);
+            
+            // 3. Derive shared secret
+            const sharedKey = await CryptoService.deriveSharedSecret(myPrivKey, friendPubKey);
+            this.sharedKeys[idAmigo] = sharedKey;
+            return sharedKey;
+        } catch (e) {
+            console.error('Failed to derive shared key', e);
+            return null;
+        }
     },
 
     _procesarEntrante(conn: DataConnection): void {
@@ -119,29 +153,47 @@ export const PeerService = {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
-                conn.send({ tipo: 'HANDSHAKE_START', miIdPublico: misCreds.idPublico, cuartaCredencial: miCuarta });
+                conn.send({ 
+                    tipo: 'HANDSHAKE_START', 
+                    miIdPublico: misCreds.idPublico, 
+                    cuartaCredencial: miCuarta,
+                    publicKey: misCreds.publicKey
+                });
             }
             if (paquete.tipo === 'HANDSHAKE_START') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
-                BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencial);
-                conn.send({ tipo: 'HANDSHAKE_FINAL', miIdPublico: misCreds.idPublico, cuartaCredencialAmigo: miCuarta });
+                BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencial, false, paquete.publicKey);
+                conn.send({ 
+                    tipo: 'HANDSHAKE_FINAL', 
+                    miIdPublico: misCreds.idPublico, 
+                    cuartaCredencialAmigo: miCuarta,
+                    publicKey: misCreds.publicKey
+                });
                 this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencial);
             }
             if (paquete.tipo === 'HANDSHAKE_FINAL') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
-                BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencialAmigo);
+                BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencialAmigo, false, paquete.publicKey);
                 this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencialAmigo);
                 this._enviarPendientes(paquete.miIdPublico, conn);
                 if (this.onRefresh) this.onRefresh();
             }
             if (paquete.tipo === 'MSG') {
+                const sharedKey = await this._getSharedKey(paquete.miIdPublico);
+                let decryptedText = '[Encrypted Message]';
+                if (sharedKey) {
+                    try {
+                        decryptedText = await CryptoService.decrypt(sharedKey, paquete.txt, paquete.iv);
+                    } catch (e) { Debug.log('Failed to decrypt E2EE message'); }
+                }
+
                 const chatMsg = {
                     msgId: paquete.msgId, chatId: paquete.miIdPublico, de: paquete.miIdPublico,
-                    msg: paquete.txt, time: paquete.time, status: 'read' as const, secure: !!paquete.channel
+                    msg: decryptedText, time: paquete.time, status: 'read' as const, secure: !!paquete.channel
                 };
                 await DB.addMessage(chatMsg);
                 conn.send({ tipo: 'MSG_ACK', msgId: paquete.msgId, read: true });
@@ -200,10 +252,22 @@ export const PeerService = {
         if (!misCreds) return;
         const info = this.conexionesP2PDirectas[chatId];
         if (!info) return;
+        const sharedKey = await this._getSharedKey(chatId);
+        if (!sharedKey) return;
+
         const pending = await DB.getPendingMessages();
         for (const m of pending) {
             if (m.chatId === chatId) {
-                conn.send({ tipo: 'MSG', msgId: m.msgId, miIdPublico: misCreds.idPublico, channel: info.channelId, txt: m.msg, time: m.time });
+                const { ciphertext, iv } = await CryptoService.encrypt(sharedKey, m.msg);
+                conn.send({ 
+                    tipo: 'MSG', 
+                    msgId: m.msgId, 
+                    miIdPublico: misCreds.idPublico, 
+                    channel: info.channelId, 
+                    txt: ciphertext, 
+                    iv, 
+                    time: m.time 
+                });
             }
         }
     },
@@ -221,14 +285,36 @@ export const PeerService = {
     async enviarMensaje(idPublicoAmigo: string, texto: string): Promise<void> {
         const misCreds = await BitChatAuth.obtenerMisCredenciales();
         if (!misCreds) return;
+        
+        const sharedKey = await this._getSharedKey(idPublicoAmigo);
         const uniqueId = crypto.randomUUID();
-        const msgData = { msgId: uniqueId, chatId: idPublicoAmigo, de: misCreds.idPublico, msg: texto, time: Date.now(), status: 'saved' as const, secure: true };
+        
+        // Save locally (DB.addMessage will encrypt with master key)
+        const msgData = { 
+            msgId: uniqueId, 
+            chatId: idPublicoAmigo, 
+            de: misCreds.idPublico, 
+            msg: texto, 
+            time: Date.now(), 
+            status: 'saved' as const, 
+            secure: true 
+        };
         await DB.addMessage(msgData);
+
         const info = this.conexionesP2PDirectas[idPublicoAmigo];
-        if (info && info.status === 'SECURE' && this.peer) {
+        if (info && info.status === 'SECURE' && sharedKey && this.peer) {
+            const { ciphertext, iv } = await CryptoService.encrypt(sharedKey, texto);
             const conn = this.peer.connect(`bitchat-auth-${idPublicoAmigo}`);
             conn.on('open', () => {
-                conn.send({ tipo: 'MSG', msgId: uniqueId, miIdPublico: misCreds.idPublico, channel: info.channelId, txt: texto, time: msgData.time });
+                conn.send({ 
+                    tipo: 'MSG', 
+                    msgId: uniqueId, 
+                    miIdPublico: misCreds.idPublico, 
+                    channel: info.channelId, 
+                    txt: ciphertext, 
+                    iv, 
+                    time: msgData.time 
+                });
                 setTimeout(() => conn.close(), 1000);
             });
         }

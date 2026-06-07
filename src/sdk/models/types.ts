@@ -2,11 +2,16 @@ export interface Credentials {
     idPublico: string;
     idPrivado: string;
     passwordHash: string;
+    salt?: string; // base64 (optional for migration)
+    publicKey?: JsonWebKey;
+    encryptedPrivateKey?: string; // base64
+    privateKeyIv?: string; // base64
 }
 
 export interface Contact {
     tokenCuartaCredencial: string;
     insecure: boolean;
+    publicKey?: JsonWebKey;
 }
 
 export interface ContactMap {
@@ -22,6 +27,7 @@ export interface Message {
     time: number;
     status: 'saved' | 'sent' | 'read';
     secure: boolean;
+    iv?: string; // Initialization vector for AES-GCM
 }
 
 export interface RequestRecord {
@@ -69,12 +75,14 @@ export interface IPaqueteHandshakeStart extends IPaqueteBase {
     tipo: 'HANDSHAKE_START';
     miIdPublico: string;
     cuartaCredencial: string;
+    publicKey: JsonWebKey;
 }
 
 export interface IPaqueteHandshakeFinal extends IPaqueteBase {
     tipo: 'HANDSHAKE_FINAL';
     miIdPublico: string;
     cuartaCredencialAmigo: string;
+    publicKey: JsonWebKey;
 }
 
 export interface IPaqueteMsg extends IPaqueteBase {
@@ -84,6 +92,7 @@ export interface IPaqueteMsg extends IPaqueteBase {
     txt: string;
     time: number;
     channel?: string;
+    iv: string; // For E2EE decryption
 }
 
 export interface IPaqueteMsgAck extends IPaqueteBase {

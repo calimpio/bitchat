@@ -1,4 +1,6 @@
 import { Message, RequestRecord, Credentials } from '../models/types.ts';
+import { Estado } from '../models/state.ts';
+import { CryptoService } from './crypto.ts';
 
 export const DB = {
     db: null as IDBDatabase | null,
@@ -102,7 +104,28 @@ export const DB = {
         });
     },
 
+    async encryptMsg(msg: string): Promise<{ ciphertext: string, iv: string }> {
+        if (!Estado.aesKey) return { ciphertext: msg, iv: '' };
+        return await CryptoService.encrypt(Estado.aesKey, msg);
+    },
+
+    async decryptMsg(ciphertext: string, iv: string): Promise<string> {
+        if (!Estado.aesKey || !iv) return ciphertext;
+        try {
+            return await CryptoService.decrypt(Estado.aesKey, ciphertext, iv);
+        } catch (e) {
+            console.error('Failed to decrypt local message', e);
+            return '[Decryption Error]';
+        }
+    },
+
     async addMessage(msg: Message): Promise<number | undefined> {
+        if (Estado.aesKey && !msg.iv) {
+            const encrypted = await this.encryptMsg(msg.msg);
+            msg.msg = encrypted.ciphertext;
+            msg.iv = encrypted.iv;
+        }
+
         return new Promise((resolve) => {
             if (!this.db) return resolve(undefined);
             const tx = this.db.transaction('messages', 'readwrite');
@@ -125,13 +148,18 @@ export const DB = {
     },
 
     async getAllMessages(): Promise<Message[]> {
-        return new Promise((resolve) => {
+        const messages: Message[] = await new Promise((resolve) => {
             if (!this.db) return resolve([]);
             const tx = this.db.transaction('messages', 'readonly');
             const store = tx.objectStore('messages');
             const req = store.getAll();
             req.onsuccess = () => resolve(req.result);
         });
+
+        for (const m of messages) {
+            if (m.iv) m.msg = await this.decryptMsg(m.msg, m.iv);
+        }
+        return messages;
     },
 
     async importMessages(messages: Message[]): Promise<void> {
@@ -151,7 +179,7 @@ export const DB = {
             const tx = this.db.transaction('messages', 'readwrite');
             const store = tx.objectStore('messages');
             const getReq = store.get(id);
-            getReq.onsuccess = () => {
+            getReq.onsuccess = async () => {
                 if (!getReq.result) return resolve();
                 const data = { ...getReq.result, ...updates };
                 store.put(data).onsuccess = () => resolve();
@@ -166,7 +194,7 @@ export const DB = {
             const store = tx.objectStore('messages');
             const index = store.index('msgId');
             const getReq = index.get(msgId);
-            getReq.onsuccess = () => {
+            getReq.onsuccess = async () => {
                 if (!getReq.result) return resolve();
                 const data = { ...getReq.result, ...updates };
                 store.put(data).onsuccess = () => resolve();
@@ -175,7 +203,7 @@ export const DB = {
     },
 
     async getChatMessages(chatId: string): Promise<Message[]> {
-        return new Promise((resolve) => {
+        const messages: Message[] = await new Promise((resolve) => {
             if (!this.db) return resolve([]);
             const tx = this.db.transaction('messages', 'readonly');
             const store = tx.objectStore('messages');
@@ -183,16 +211,53 @@ export const DB = {
             const req = index.getAll(chatId);
             req.onsuccess = () => resolve(req.result.sort((a: Message, b: Message) => a.time - b.time));
         });
+
+        for (const m of messages) {
+            if (m.iv) m.msg = await this.decryptMsg(m.msg, m.iv);
+        }
+        return messages;
     },
 
     async getPendingMessages(): Promise<Message[]> {
-        return new Promise((resolve) => {
+        const messages: Message[] = await new Promise((resolve) => {
             if (!this.db) return resolve([]);
             const tx = this.db.transaction('messages', 'readonly');
             const store = tx.objectStore('messages');
             const index = store.index('status');
             const req = index.getAll('saved');
             req.onsuccess = () => resolve(req.result);
+        });
+
+        for (const m of messages) {
+            if (m.iv) m.msg = await this.decryptMsg(m.msg, m.iv);
+        }
+        return messages;
+    },
+
+    async migratePlainMessages(): Promise<void> {
+        if (!this.db || !Estado.aesKey) return;
+        console.log("[BitChat Migration] Checking for unencrypted messages...");
+        const tx = this.db.transaction('messages', 'readwrite');
+        const store = tx.objectStore('messages');
+        const req = store.openCursor();
+        
+        return new Promise((resolve) => {
+            req.onsuccess = async (e) => {
+                const cursor = (e.target as IDBRequest).result;
+                if (cursor) {
+                    const m = cursor.value as Message;
+                    if (!m.iv) {
+                        console.log(`[BitChat Migration] Encrypting message ${m.msgId}...`);
+                        const encrypted = await this.encryptMsg(m.msg);
+                        m.msg = encrypted.ciphertext;
+                        m.iv = encrypted.iv;
+                        cursor.update(m);
+                    }
+                    cursor.continue();
+                } else {
+                    resolve();
+                }
+            };
         });
     }
 };

@@ -12,6 +12,7 @@ export interface AppState {
     me: Credentials | null;
     solicitudesEnviadasPendientes: Set<string>;
     mostrarChatMobile: boolean;
+    aesKey?: CryptoKey; // Shared key for local DB encryption
 }
 
 export const Estado: AppState = {

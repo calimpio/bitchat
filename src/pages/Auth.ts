@@ -1,5 +1,5 @@
 import { h } from '../utils/dom.ts';
-import { Estado, BitChatAuth, PeerService } from '../sdk/index.ts';
+import { Estado, BitChatAuth, PeerService, DB } from '../sdk/index.ts';
 import { Card } from '../components/ui/Card.ts';
 import { Input } from '../components/ui/Input.ts';
 
@@ -56,6 +56,10 @@ export function AuthPage(renderApp: () => void) {
                                 return; 
                             }
                             Estado.masterPassword = pass as any;
+                            
+                            // 🚀 Run Migration Protocol
+                            await DB.migratePlainMessages();
+
                             if (Estado.me) {
                                 await PeerService.inicializarNodo(Estado.me.idPublico);
                             }
