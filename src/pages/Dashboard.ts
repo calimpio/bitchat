@@ -9,6 +9,7 @@ export async function DashboardPage(renderApp: () => void) {
     if (!Estado.me) return h('div', {}, 'Error: No credentials');
 
     const misCreds = Estado.me;
+    const myFingerprint = await CryptoService.getFingerprint(misCreds.publicKey);
 
     const modalAdd = Modal({
         id: 'modal-add',
@@ -35,7 +36,10 @@ export async function DashboardPage(renderApp: () => void) {
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } }, [
             h('div', { style: { width: '10px', height: '10px', background: 'var(--success)', borderRadius: '50%', boxShadow: '0 0 8px var(--success)' } }),
             h('h2', { style: { fontSize: '18px', fontWeight: '700' } }, `@${misCreds.idPrivado}`),
-            h('span', { style: { fontSize: '12px', color: 'var(--text-dim)' } }, `[ID: ${misCreds.idPublico}]`)
+            h('div', { style: { display: 'flex', flexDirection: 'column'} }, [
+                h('span', { style: { fontSize: '10px', color: 'var(--text-dim)' } }, `ID: ${misCreds.idPublico}`),
+                h('span', { style: { fontSize: '10px', color: 'var(--accent-blue)', letterSpacing: '1px'} }, `Mi Huella: ${myFingerprint}`)
+            ])
         ]),
         h('div', { style: { display: 'flex', gap: '12px' } }, [
             Button({ text: '⚙ Configuración', variant: 'ghost', style: { padding: '6px 12px' }, onClick: () => { Estado.showModalConfig = true; renderApp(); } }),
