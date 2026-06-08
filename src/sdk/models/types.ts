@@ -74,6 +74,7 @@ export interface IPaqueteIdentityMatch extends IPaqueteBase {
     deviceId?: string;
     deviceLabel?: string;
     publicKey?: JsonWebKey;
+    creds?: Credentials;
 }
 
 export interface IPaqueteSecurityAlert extends IPaqueteBase {

@@ -1,7 +1,7 @@
 import { Peer, DataConnection } from 'peerjs';
 import { DB } from './db.ts';
 import { BitChatAuth, generarCuartaCredencial, generarQuintaId, hashString } from './auth.ts';
-import { IPaqueteData, ContactMap, Message } from '../models/types.ts';
+import { IPaqueteData, ContactMap, Message, Credentials } from '../models/types.ts';
 import { CryptoService } from './crypto.ts';
 import { VaultService } from './vault.ts';
 import { IPeerService } from './interfaces/IPeerService.ts';
@@ -88,7 +88,7 @@ export const PeerService: IPeerService = {
         });
     },
 
-    async validarIdentidadEnRed(idPublico: string, idPrivado: string, passwordHash: string): Promise<boolean> {
+    async validarIdentidadEnRed(idPublico: string, idPrivado: string, passwordHash: string): Promise<boolean | Credentials> {
         return new Promise(async (resolve) => {
             const probeId = `bc-probe-${crypto.randomUUID().substring(0, 8)}`;
             const probePeer = new Peer(probeId);
@@ -108,7 +108,7 @@ export const PeerService: IPeerService = {
                 conn.on('data', (data: unknown) => {
                     const paquete = data as IPaqueteData;
                     if (paquete.tipo === 'IDENTITY_CONFLICT') { probePeer.destroy(); resolve(false); }
-                    if (paquete.tipo === 'IDENTITY_MATCH') { probePeer.destroy(); resolve(true); }
+                    if (paquete.tipo === 'IDENTITY_MATCH') { probePeer.destroy(); resolve(paquete.creds || true); }
                 });
                 conn.on('error', () => { probePeer.destroy(); resolve(true); });
             });
@@ -236,7 +236,7 @@ export const PeerService: IPeerService = {
                     const remoteDeviceId = paquete.deviceId || conn.peer!.replace('bc-v2-', '').split('-')[0];
                     if (this.deviceConns) this.deviceConns[remoteDeviceId] = conn;
                     await DB.addDevice({ deviceId: remoteDeviceId, idPublico: paquete.deIdPublico, label: paquete.deviceLabel || 'Otra Terminal', isOnline: true, lastSeen: Date.now(), peerId: conn.peer, publicKey: paquete.publicKey });
-                    conn.send({ tipo: 'IDENTITY_MATCH', deviceId: this.localDeviceId, deviceLabel: this.localEnvLabel, publicKey: misCreds.publicKey });
+                    conn.send({ tipo: 'IDENTITY_MATCH', deviceId: this.localDeviceId, deviceLabel: this.localEnvLabel, publicKey: misCreds.publicKey, creds: misCreds });
                     if (this.onRefresh) this.onRefresh();
                 } else { conn.send({ tipo: 'IDENTITY_CONFLICT' }); this._alertarContactosDeIntentoDeSecuestro(misCreds.idPublico); }
             }

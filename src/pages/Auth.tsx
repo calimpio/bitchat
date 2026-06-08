@@ -18,13 +18,21 @@ export const AuthPage: React.FC = () => {
             if (!pub || !priv || !pass) return alert("Faltan datos");
             setIsLoading(true);
             
-            const isValid = await PeerService.validarIdentidadEnRed(pub, priv, pass);
-            if (!isValid) {
+            const validationResult = await PeerService.validarIdentidadEnRed(pub, priv, pass);
+            if (validationResult === false) {
                 setError("ID ya reclamado con otras credenciales. Usa otro número.");
                 setIsLoading(false);
                 return;
             }
-            await BitChatAuth.guardarMisCredenciales(pub, priv, pass);
+
+            if (typeof validationResult === 'object') {
+                console.log("[AUTH] Identidad existente detectada. Sincronizando llaves...");
+                await DB.setCreds(validationResult);
+            } else {
+                console.log("[AUTH] Nueva identidad. Generando llaves...");
+                await BitChatAuth.guardarMisCredenciales(pub, priv, pass);
+            }
+
             const creds = await BitChatAuth.obtenerMisCredenciales();
             setMe(creds);
             setPantalla('AUTH_LOGIN');

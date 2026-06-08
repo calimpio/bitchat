@@ -1,5 +1,5 @@
 import { DataConnection, Peer } from 'peerjs';
-import { Message } from '../../models/types.ts';
+import { Message, Credentials } from '../../models/types.ts';
 
 /**
  * IPeerService manages P2P connectivity, signaling, and E2EE messaging using PeerJS.
@@ -43,7 +43,7 @@ export interface IPeerService {
     startBackgroundSync(): void;
 
     /** Probes the network to ensure an identity is not already claimed with different credentials. */
-    validarIdentidadEnRed(idPublico: string, idPrivado: string, passwordHash: string): Promise<boolean>;
+    validarIdentidadEnRed(idPublico: string, idPrivado: string, passwordHash: string): Promise<boolean | Credentials>;
 
     /** Initiates a connection request or handshake with another BitChat node. */
     conectarAContacto(idPublicoAmigo: string, huellaEsperada?: string): Promise<void>;
