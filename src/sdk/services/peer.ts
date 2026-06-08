@@ -643,6 +643,21 @@ export const PeerService: IPeerService = {
 
                             const validados = mensajes.filter(m => m.msgId || m.time);
                             await DB.importMessages(validados);
+
+                            // [NUEVO] Al sincronizar manualmente, auto-autorizamos dispositivos para mantener consistencia
+                            const remoteDeviceId = conn.peer?.replace('bc-v2-', '').split('-')[0];
+                            if (remoteDeviceId) {
+                                const allContacts = await BitChatAuth.obtenerContactos();
+                                for (const id in allContacts) {
+                                    const c = allContacts[id];
+                                    if (!c.syncAllowedDevices) c.syncAllowedDevices = [];
+                                    if (!c.syncAllowedDevices.includes(remoteDeviceId)) {
+                                        c.syncAllowedDevices.push(remoteDeviceId);
+                                        await BitChatAuth.guardarContacto(id, c.tokenCuartaCredencial, c.insecure, c.publicKey, c.syncAllowedDevices, c.sharedSecret);
+                                    }
+                                }
+                            }
+
                             probePeer.destroy();
                             resolve(true);
                             if (this.onRefresh) this.onRefresh();
@@ -729,20 +744,31 @@ export const PeerService: IPeerService = {
 
     async syncChat(chatId: string): Promise<void> {
         const misCreds = await BitChatAuth.obtenerMisCredenciales();
-        if (!misCreds || !this.deviceConns) return;
+        if (!misCreds) return;
 
-        console.log(`[SYNC-CHAT] Solicitando sincronización proactiva para el chat: ${chatId}`);
+        console.log(`[SYNC-CHAT] Solicitando sincronización proactiva bidireccional para: ${chatId}`);
         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
         
         const chatMsgs = await DB.getChatMessages(chatId);
         const lastTime = chatMsgs.length > 0 ? chatMsgs[chatMsgs.length - 1].time : 0;
         const repairMsgIds = chatMsgs.filter(m => !!m.ciphertext).map(m => m.msgId);
 
-        for (const deviceId in this.deviceConns) {
-            const conn = this.deviceConns[deviceId];
-            if (conn.open && deviceId !== this.localDeviceId) {
-                conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds });
+        // 1. Sincronizar con nuestras otras terminales personales
+        if (this.deviceConns) {
+            for (const deviceId in this.deviceConns) {
+                const conn = this.deviceConns[deviceId];
+                if (conn.open && deviceId !== this.localDeviceId) {
+                    conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds });
+                }
             }
+        }
+
+        // 2. Intentar sincronizar con el contacto directamente si está online para paridad de historial
+        const directConn = this.conexionesP2PDirectas[chatId]?.conn;
+        if (directConn?.open) {
+            directConn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds });
+        } else {
+            this.conectarAContacto(chatId);
         }
     }
 };
