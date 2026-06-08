@@ -27,8 +27,13 @@ export const Sidebar: React.FC = () => {
                 >
                     💬 bitChat
                 </div>
+                <div 
+                    className={`nav-item ${activeApp === 'bitDevices' ? 'active' : ''}`} 
+                    onClick={() => setActiveApp('bitDevices')}
+                >
+                    📱 bitDevices
+                </div>
                 <div className="nav-item" style={{ opacity: 0.4 }}>📂 bitDrive (Prox)</div>
-                <div className="nav-item" style={{ opacity: 0.4 }}>📱 bitDevices (Prox)</div>
             </div>
             <div className="sidebar-footer">
                 <div 

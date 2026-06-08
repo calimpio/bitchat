@@ -4,6 +4,7 @@ import { Header } from '../components/layout/Header.tsx';
 import { Sidebar } from '../components/layout/Sidebar.tsx';
 import { ChatView } from '../components/views/ChatView.tsx';
 import { SettingsView } from '../components/views/SettingsView.tsx';
+import { DevicesView } from '../components/views/DevicesView.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { Input } from '../components/ui/Input.tsx';
 import { Button } from '../components/ui/Button.tsx';
@@ -80,7 +81,8 @@ export const DashboardPage: React.FC = () => {
                 <div className="app-viewport">
                     {activeApp === 'bitChat' && <ChatView />}
                     {activeApp === 'Settings' && <SettingsView />}
-                    {activeApp !== 'bitChat' && activeApp !== 'Settings' && (
+                    {activeApp === 'bitDevices' && <DevicesView />}
+                    {activeApp !== 'bitChat' && activeApp !== 'Settings' && activeApp !== 'bitDevices' && (
                         <div style={{ textAlign: 'center', marginTop: '50px', color: 'var(--text-dim)' }}>Próximamente...</div>
                     )}
                 </div>

@@ -12,6 +12,7 @@ interface AppStore extends AppState {
     setShowSidebar: (show: boolean) => void;
     setMostrarChatMobile: (show: boolean) => void;
     setHistoriales: (historiales: Record<string, Message[]>) => void;
+    setDevices: (devices: AppState['devices']) => void;
 }
 
 export const useStore = create<AppStore>((set) => ({
@@ -29,6 +30,7 @@ export const useStore = create<AppStore>((set) => ({
     mostrarChatMobile: false,
     showSidebar: true,
     aesKey: null,
+    devices: [],
 
     setPantalla: (pantalla) => set({ pantalla }),
     setError: (error) => set({ error }),
@@ -40,4 +42,5 @@ export const useStore = create<AppStore>((set) => ({
     setShowSidebar: (showSidebar) => set({ showSidebar }),
     setMostrarChatMobile: (mostrarChatMobile) => set({ mostrarChatMobile }),
     setHistoriales: (historiales) => set({ historiales }),
+    setDevices: (devices) => set({ devices }),
 }));
