@@ -1,4 +1,4 @@
-console.log("[SDK] BitChat SDK v1.0.1 - Inicializado");
+console.log("[SDK] BitChat SDK v1.0.2 - Inicializado");
 
 export * from './models/types.ts';
 export * from './models/vault.ts';
