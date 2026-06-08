@@ -550,6 +550,21 @@ export const PeerService: IPeerService = {
 
         // Ensure message is decrypted for transmission between personal devices
         const msgCopy = { ...msg };
+
+        // Caso A: Mensaje cifrado para la bóveda local (Vault)
+        if (msgCopy.iv && !msgCopy.ciphertext) {
+            try {
+                const decrypted = await DB.decryptMsg(msgCopy.msg, msgCopy.iv);
+                if (decrypted !== '[Decryption Error]') {
+                    msgCopy.msg = decrypted;
+                    msgCopy.iv = undefined;
+                }
+            } catch (e) {
+                console.warn('[REPLICACIÓN] No se pudo descifrar para replicar:', e);
+            }
+        }
+
+        // Caso B: Mensaje cifrado para transporte P2P
         if (msgCopy.msg === '[Mensaje Cifrado]' && msgCopy.ciphertext && msgCopy.iv) {
             const sharedKey = await this._getSharedKey(msgCopy.chatId);
             if (sharedKey) { 
