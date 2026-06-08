@@ -120,6 +120,7 @@ export interface IPaqueteMsgAck extends IPaqueteBase {
 export interface IPaqueteSyncRequest extends IPaqueteBase {
     tipo: 'SYNC_REQUEST';
     cuarta: string;
+    lastMessageTime?: number; // Delta sync: only request messages after this timestamp
 }
 
 export interface IPaqueteSyncData extends IPaqueteBase {

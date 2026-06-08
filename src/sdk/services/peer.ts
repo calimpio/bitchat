@@ -675,6 +675,10 @@ export const PeerService: IPeerService = {
         if (!misCreds) return false;
         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, password);
 
+        // Get last local message time for delta sync
+        const allLocalMsgs = await DB.getAllMessages();
+        const lastLocalTime = allLocalMsgs.length > 0 ? Math.max(...allLocalMsgs.map(m => m.time)) : 0;
+
         return new Promise((resolve) => {
             const probeId = `bc-sync-probe-${crypto.randomUUID().substring(0, 8)}`;
             const probePeer = new Peer(probeId);
@@ -692,7 +696,11 @@ export const PeerService: IPeerService = {
 
                     conn.on('open', () => {
                         foundAny = true;
-                        conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta });
+                        conn.send({ 
+                            tipo: 'SYNC_REQUEST', 
+                            cuarta: miCuarta, 
+                            lastMessageTime: lastLocalTime 
+                        });
                     });
 
                     conn.on('data', async (data: unknown) => {
