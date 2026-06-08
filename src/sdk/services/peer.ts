@@ -11,7 +11,7 @@ export const PeerService: IPeerService = {
     peer: null,
     conexionesP2PDirectas: {},
     syncSessions: {},
-    sharedKeys: {}, 
+    sharedKeys: {},
     onRefresh: null,
     onMessage: null,
     localDeviceId: undefined,
@@ -20,7 +20,7 @@ export const PeerService: IPeerService = {
     async inicializarNodo(idPublico: string, useSuffix: boolean = false): Promise<void> {
         const hashedId = await hashString(idPublico);
         const myAuthId = `bc-v2-${hashedId.substring(0, 24)}`;
-        
+
         const isWindows = !!(window as any).chrome?.webview;
         const userAgent = navigator.userAgent;
         let envLabel = 'Browser';
@@ -28,7 +28,7 @@ export const PeerService: IPeerService = {
         else if (userAgent.includes('Firefox')) envLabel = 'Firefox';
         else if (userAgent.includes('Chrome')) envLabel = 'Chrome';
         else if (userAgent.includes('Safari')) envLabel = 'Safari';
-        
+
         this.localEnvLabel = envLabel;
 
         let deviceId = localStorage.getItem('bit_device_id');
@@ -48,13 +48,13 @@ export const PeerService: IPeerService = {
             this.peer.destroy();
             this.peer = null;
         }
-        
+
         this.peer = new Peer(fullId, { debug: 0 });
 
         this.peer.on('open', (id) => {
             console.log('Nodo P2P abierto con ID:', id);
             if (this.onRefresh) this.onRefresh();
-            
+
             // Re-trigger discovery and sync immediately upon opening
             DB.cleanInvalidMessages();
             this.buscarDispositivos();
@@ -72,7 +72,7 @@ export const PeerService: IPeerService = {
                 this.inicializarNodo(idPublico, true);
                 return;
             }
-            if (err.type === 'peer-unavailable') return; 
+            if (err.type === 'peer-unavailable') return;
             if (err.type !== 'peer-unavailable' && err.type !== 'disconnected') {
                 console.error('Error en PeerJS:', err);
             }
@@ -94,7 +94,7 @@ export const PeerService: IPeerService = {
             const miCuarta = await generarCuartaCredencial(idPublico, idPrivado, passwordHash);
             const targetHashedId = await hashString(idPublico);
             const targetAuthId = `bc-v2-${targetHashedId.substring(0, 24)}`;
-            
+
             let foundExisting = false;
 
             probePeer.on('open', () => {
@@ -119,15 +119,15 @@ export const PeerService: IPeerService = {
         this.syncInterval = setInterval(async () => {
             const misCreds = await BitChatAuth.obtenerMisCredenciales();
             if (!misCreds) return;
-            
+
             // 1. Sync messages with pending contacts
             const pending = await DB.getPendingMessages();
             const uniqueTargets = [...new Set(pending.map(m => m.chatId))];
             for (const target of uniqueTargets) { this.conectarAContacto(target); }
-            
+
             // 2. Retry pending contact requests
             for (const target of Array.from(useStore.getState().solicitudesEnviadasPendientes)) { this.conectarAContacto(target); }
-            
+
             // 3. Discovery: Look for other personal terminals
             this.buscarDispositivos();
         }, 60000) as unknown as number;
@@ -135,16 +135,16 @@ export const PeerService: IPeerService = {
 
     async conectarADispositivoPersonal(targetId: string): Promise<void> {
         if (!this.peer || !this.peer.open || !targetId || targetId === this.peer.id) return;
-        
+
         console.log(`Intentando conectar a dispositivo personal: ${targetId}`);
         const conn = this.peer.connect(targetId, { reliable: true });
         conn.on('open', async () => {
             const misCreds = await BitChatAuth.obtenerMisCredenciales();
             if (!misCreds) return;
             const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
-            conn.send({ 
-                tipo: 'IDENTITY_PROBE', 
-                deIdPublico: misCreds.idPublico, 
+            conn.send({
+                tipo: 'IDENTITY_PROBE',
+                deIdPublico: misCreds.idPublico,
                 cuarta: miCuarta,
                 nonce: crypto.randomUUID(),
                 deviceId: this.localDeviceId,
@@ -171,8 +171,8 @@ export const PeerService: IPeerService = {
         const hashedId = await hashString(idPublicoAmigo);
         const conn = this.peer.connect(`bc-v2-${hashedId.substring(0, 24)}`, { reliable: true });
         const contactos = await BitChatAuth.obtenerContactos();
-        if (!contactos[idPublicoAmigo]) { 
-            useStore.getState().solicitudesEnviadasPendientes.add(idPublicoAmigo); 
+        if (!contactos[idPublicoAmigo]) {
+            useStore.getState().solicitudesEnviadasPendientes.add(idPublicoAmigo);
             this.conexionesP2PDirectas[idPublicoAmigo] = { status: 'PENDING', conn };
         }
 
@@ -184,12 +184,12 @@ export const PeerService: IPeerService = {
                 if (this.conexionesP2PDirectas[idPublicoAmigo]?.status !== 'SECURE') {
                     const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                     conn.send({ tipo: 'HANDSHAKE_START', miIdPublico: misCreds.idPublico, cuartaCredencial: miCuarta, publicKey: misCreds.publicKey! });
-                } else { 
+                } else {
                     this.conexionesP2PDirectas[idPublicoAmigo].conn = conn;
-                    this._enviarPendientes(idPublicoAmigo, conn); 
+                    this._enviarPendientes(idPublicoAmigo, conn);
                 }
-            } else { 
-                conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico, publicKey: misCreds.publicKey!, huellaDestino: huellaEsperada }); 
+            } else {
+                conn.send({ tipo: 'CONNECTION_REQ', deIdPublico: misCreds.idPublico, publicKey: misCreds.publicKey!, huellaDestino: huellaEsperada });
             }
         });
         this._procesarEntrante(conn);
@@ -225,10 +225,10 @@ export const PeerService: IPeerService = {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
-                if (paquete.cuarta === miCuarta) { 
+                if (paquete.cuarta === miCuarta) {
                     const remoteDeviceId = paquete.deviceId || conn.peer!.replace('bc-v2-', '').split('-')[0];
                     await DB.addDevice({ deviceId: remoteDeviceId, idPublico: paquete.deIdPublico, label: paquete.deviceLabel || 'Otra Terminal', isOnline: true, lastSeen: Date.now(), peerId: conn.peer });
-                    conn.send({ tipo: 'IDENTITY_MATCH', deviceId: this.localDeviceId, deviceLabel: this.localEnvLabel }); 
+                    conn.send({ tipo: 'IDENTITY_MATCH', deviceId: this.localDeviceId, deviceLabel: this.localEnvLabel });
                     if (this.onRefresh) this.onRefresh();
                 } else { conn.send({ tipo: 'IDENTITY_CONFLICT' }); this._alertarContactosDeIntentoDeSecuestro(misCreds.idPublico); }
             }
@@ -236,7 +236,7 @@ export const PeerService: IPeerService = {
                 const remoteDeviceId = paquete.deviceId || conn.peer?.replace('bc-v2-', '').split('-')[0];
                 if (remoteDeviceId) {
                     await DB.addDevice({ deviceId: remoteDeviceId, idPublico: conn.peer!.replace('bc-v2-', '').split('-')[0], label: paquete.deviceLabel || 'Otra Terminal', isOnline: true, lastSeen: Date.now(), peerId: conn.peer });
-                    
+
                     if (!this.syncSessions[remoteDeviceId]) {
                         this.syncSessions[remoteDeviceId] = true;
                         const misCreds = await BitChatAuth.obtenerMisCredenciales();
@@ -252,14 +252,19 @@ export const PeerService: IPeerService = {
                     if (this.onRefresh) this.onRefresh();
                 }
             }
-            if (paquete.tipo === 'SECURITY_ALERT') { await BitChatAuth.marcarContactoInseguro(paquete.idComprometido); if (this.onRefresh) this.onRefresh(); }
+            if (paquete.tipo === 'SECURITY_ALERT') {
+                await BitChatAuth.marcarContactoInseguro(paquete.idComprometido);
+                if (this.onRefresh) this.onRefresh();
+            }
             if (paquete.tipo === 'CONNECTION_REQ') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
-                if (misCreds?.publicKey && paquete.huellaDestino === await CryptoService.getFingerprint(misCreds.publicKey)) { await this.aceptarConexion(paquete.deIdPublico); return; }
+                if (misCreds?.publicKey && paquete.huellaDestino === await CryptoService.getFingerprint(misCreds.publicKey)) 
+                    { await this.aceptarConexion(paquete.deIdPublico); return; }
                 await DB.addRequest({ idPublico: paquete.deIdPublico, time: Date.now(), publicKey: paquete.publicKey });
                 if (this.onRefresh) this.onRefresh();
             }
-            if (paquete.tipo === 'CONNECTION_REJECTED') { useStore.getState().solicitudesEnviadasPendientes.delete(paquete.deIdPublico); if (this.onRefresh) this.onRefresh(); }
+            if (paquete.tipo === 'CONNECTION_REJECTED') 
+                { useStore.getState().solicitudesEnviadasPendientes.delete(paquete.deIdPublico); if (this.onRefresh) this.onRefresh(); }
             if (paquete.tipo === 'CONNECTION_ACCEPTED') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
@@ -286,14 +291,15 @@ export const PeerService: IPeerService = {
             if (paquete.tipo === 'MSG') {
                 const sharedKey = await this._getSharedKey(paquete.miIdPublico!);
                 let decryptedText = '[Mensaje Cifrado]', isDecrypted = false;
-                if (sharedKey) { try { decryptedText = await CryptoService.decrypt(sharedKey, paquete.txt, paquete.iv); isDecrypted = true; } catch (e) {} }
+                if (sharedKey) { try { decryptedText = await CryptoService.decrypt(sharedKey, paquete.txt, paquete.iv); isDecrypted = true; } catch (e) { } }
                 const chatMsg: Message = { msgId: paquete.msgId, chatId: paquete.miIdPublico!, de: paquete.miIdPublico!, msg: decryptedText, time: paquete.time, status: 'read', secure: true, iv: isDecrypted ? undefined : paquete.iv, ciphertext: isDecrypted ? undefined : paquete.txt };
                 await DB.addMessage(chatMsg);
                 conn.send({ tipo: 'MSG_ACK', msgId: paquete.msgId, read: true });
                 if (this.onMessage) this.onMessage(paquete.miIdPublico!);
                 if (this.onRefresh) this.onRefresh();
             }
-            if (paquete.tipo === 'MSG_ACK') { await DB.updateMessageByMsgId(paquete.msgId, { status: paquete.read ? 'read' : 'sent' }); if (this.onRefresh) this.onRefresh(); }
+            if (paquete.tipo === 'MSG_ACK') 
+                { await DB.updateMessageByMsgId(paquete.msgId, { status: paquete.read ? 'read' : 'sent' }); if (this.onRefresh) this.onRefresh(); }
             if (paquete.tipo === 'SYNC_REQUEST') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
@@ -311,10 +317,10 @@ export const PeerService: IPeerService = {
                     for (const m of deltaMensajes) {
                         if (m.msg === '[Mensaje Cifrado]' && m.ciphertext && m.iv) {
                             const sharedKey = await this._getSharedKey(m.chatId);
-                            if (sharedKey) { try { m.msg = await CryptoService.decrypt(sharedKey, m.ciphertext, m.iv); m.ciphertext = undefined; m.iv = undefined; } catch (e) {} }
+                            if (sharedKey) { try { m.msg = await CryptoService.decrypt(sharedKey, m.ciphertext, m.iv); m.ciphertext = undefined; m.iv = undefined; } catch (e) { } }
                         }
                     }
-                    
+
                     // E2EE para dispositivos: Cifrar payload con nuestra propia llave pública
                     const payload = { contactos: filteredContactos, mensajes: deltaMensajes };
                     const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, misCreds.publicKey!);
@@ -339,7 +345,7 @@ export const PeerService: IPeerService = {
 
                 console.log(`[DEBUG-SYNC] Recibido paquete SYNC_DATA con ${Object.keys(contactos).length} contactos y ${mensajes.length} mensajes.`);
                 for (const id in contactos) { await BitChatAuth.guardarContacto(id, contactos[id].tokenCuartaCredencial, contactos[id].insecure, contactos[id].publicKey, contactos[id].syncAllowedDevices); delete this.sharedKeys[id]; }
-                
+
                 // Validar mensajes antes de importar
                 const validados = mensajes.filter(m => {
                     if (!m.msgId) return !!m.time; // Si no tiene ID, debe tener al menos fecha para ser considerado
@@ -349,7 +355,7 @@ export const PeerService: IPeerService = {
                 for (const m of validados) {
                     if (m.msg === '[Mensaje Cifrado]' && m.ciphertext && m.iv) {
                         const sharedKey = await this._getSharedKey(m.chatId);
-                        if (sharedKey) { try { m.msg = await CryptoService.decrypt(sharedKey, m.ciphertext, m.iv); m.ciphertext = undefined; m.iv = undefined; } catch (e) {} }
+                        if (sharedKey) { try { m.msg = await CryptoService.decrypt(sharedKey, m.ciphertext, m.iv); m.ciphertext = undefined; m.iv = undefined; } catch (e) { } }
                     }
                 }
                 await DB.importMessages(validados);
@@ -436,7 +442,7 @@ export const PeerService: IPeerService = {
         if (!misCreds) return false;
         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, password);
         const allMsgs = await DB.getAllMessages(), lastTime = allMsgs.length > 0 ? Math.max(...allMsgs.map(m => m.time)) : 0;
-        const repairIds = allMsgs.filter(m => m.msg === '[Mensaje Cifrado]' && m.ciphertext && m.iv).map(m => m.msgId);
+        const repairIds = allMsgs.filter(m => m.msg === '[Mensaje Cifrado]' && m.iv).map(m => m.msgId);
         return new Promise((resolve) => {
             const probePeer = new Peer(`bc-sync-probe-${crypto.randomUUID().substring(0, 8)}`);
             let foundAny = false;
@@ -464,15 +470,15 @@ export const PeerService: IPeerService = {
                                 }
                             }
 
-                            for (const id in contactos) { 
-                                await BitChatAuth.guardarContacto(id, contactos[id].tokenCuartaCredencial, contactos[id].insecure, contactos[id].publicKey, contactos[id].syncAllowedDevices); 
-                                delete this.sharedKeys[id]; 
+                            for (const id in contactos) {
+                                await BitChatAuth.guardarContacto(id, contactos[id].tokenCuartaCredencial, contactos[id].insecure, contactos[id].publicKey, contactos[id].syncAllowedDevices);
+                                delete this.sharedKeys[id];
                             }
-                            
+
                             const validados = mensajes.filter(m => m.msgId || m.time);
-                            await DB.importMessages(validados); 
-                            probePeer.destroy(); 
-                            resolve(true); 
+                            await DB.importMessages(validados);
+                            probePeer.destroy();
+                            resolve(true);
                             if (this.onRefresh) this.onRefresh();
                         }
                     });
