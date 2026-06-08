@@ -9,20 +9,22 @@ export const DB: IDBService = {
 
     init(): Promise<void> {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('bitchat_db', 11);
+            const req = indexedDB.open('bitchat_db', 12);
             req.onupgradeneeded = (e) => {
                 const db = (e.target as IDBOpenDBRequest).result;
+                const tx = (e.target as IDBOpenDBRequest).transaction!;
+                
+                if (db.objectStoreNames.contains('messages')) {
+                    const store = tx.objectStore('messages');
+                    if (store.keyPath !== 'msgId') {
+                        db.deleteObjectStore('messages');
+                    }
+                }
+                
                 if (!db.objectStoreNames.contains('messages')) {
-                    const store = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
+                    const store = db.createObjectStore('messages', { keyPath: 'msgId' });
                     store.createIndex('chatId', 'chatId', { unique: false });
                     store.createIndex('status', 'status', { unique: false });
-                    store.createIndex('msgId', 'msgId', { unique: true });
-                } else {
-                    const tx = (e.target as IDBOpenDBRequest).transaction!;
-                    const store = tx.objectStore('messages');
-                    if (!store.indexNames.contains('msgId')) {
-                        store.createIndex('msgId', 'msgId', { unique: true });
-                    }
                 }
                 if (!db.objectStoreNames.contains('credentials')) {
                     db.createObjectStore('credentials', { keyPath: 'id' });
@@ -199,12 +201,12 @@ export const DB: IDBService = {
         }
     },
 
-    async addMessage(msg: Message): Promise<number | undefined> {
+    async addMessage(msg: Message): Promise<string | undefined> {
         const { aesKey } = useStore.getState();
 
-        // VALIDACIÓN: El mensaje debe tener al menos ID o Fecha
+        // VALIDACIÓN: El mensaje debe tener al menos msgId o Fecha
         if (!msg.msgId && !msg.time) {
-            console.warn('[DB] Rechazando mensaje sin ID y sin Fecha');
+            console.warn('[DB] Rechazando mensaje sin msgId y sin Fecha');
             return undefined;
         }
         
@@ -221,8 +223,7 @@ export const DB: IDBService = {
             const tx = this.db.transaction('messages', 'readwrite');
             const store = tx.objectStore('messages');
             if (msg.msgId) {
-                const index = store.index('msgId');
-                const checkReq = index.get(msg.msgId);
+                const checkReq = store.get(msg.msgId);
                 checkReq.onsuccess = () => {
                     if (checkReq.result) {
                         const existing = checkReq.result as Message;
@@ -234,19 +235,20 @@ export const DB: IDBService = {
                             const updated: Message = { ...existing, ...msg };
                             // Limpieza estricta de metadatos de transporte antiguo
                             if (!msg.ciphertext) updated.ciphertext = undefined;
-                            store.put(updated).onsuccess = () => resolve(existing.id);
+                            store.put(updated).onsuccess = () => resolve(existing.msgId);
                         } else {
-                            resolve(existing.id);
+                            resolve(existing.msgId);
                         }
                     }
                     else {
                         const addReq = store.add(msg);
-                        addReq.onsuccess = (e) => resolve((e.target as IDBRequest).result);
+                        addReq.onsuccess = () => resolve(msg.msgId);
                     }
                 };
             } else {
-                const addReq = store.add(msg);
-                addReq.onsuccess = (e) => resolve((e.target as IDBRequest).result);
+                // Si no tiene msgId (raro en v2), lo ignoramos o generamos uno
+                console.warn('[DB] addMessage: No se puede guardar mensaje sin msgId');
+                resolve(undefined);
             }
         });
     },
@@ -260,7 +262,7 @@ export const DB: IDBService = {
             const tx = this.db.transaction('messages', 'readwrite');
             const store = tx.objectStore('messages');
             for (const m of toDelete) {
-                if (m.id) store.delete(m.id);
+                if (m.msgId) store.delete(m.msgId);
             }
         }
     },
@@ -290,23 +292,8 @@ export const DB: IDBService = {
     async importMessages(messages: Message[]): Promise<void> {
         if (!this.db) return;
         for (const m of messages) {
-            delete m.id;
             await this.addMessage(m);
         }
-    },
-
-    async updateMessage(id: number, updates: Partial<Message>): Promise<void> {
-        return new Promise((resolve) => {
-            if (!this.db) return resolve();
-            const tx = this.db.transaction('messages', 'readwrite');
-            const store = tx.objectStore('messages');
-            const getReq = store.get(id);
-            getReq.onsuccess = async () => {
-                if (!getReq.result) return resolve();
-                const data = { ...getReq.result, ...updates };
-                store.put(data).onsuccess = () => resolve();
-            };
-        });
     },
 
     async updateMessageByMsgId(msgId: string, updates: Partial<Message>): Promise<void> {
@@ -314,8 +301,7 @@ export const DB: IDBService = {
             if (!this.db) return resolve();
             const tx = this.db.transaction('messages', 'readwrite');
             const store = tx.objectStore('messages');
-            const index = store.index('msgId');
-            const getReq = index.get(msgId);
+            const getReq = store.get(msgId);
             getReq.onsuccess = async () => {
                 if (!getReq.result) return resolve();
                 const data = { ...getReq.result, ...updates };

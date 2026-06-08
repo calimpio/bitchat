@@ -22,7 +22,6 @@ export interface ContactMap {
 }
 
 export interface Message {
-    id?: number;
     msgId: string;
     chatId: string;
     de: string;

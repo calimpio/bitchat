@@ -244,9 +244,9 @@ export const PeerService: IPeerService = {
                             const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                             const allMsgs = await DB.getAllMessages();
                             const lastTime = allMsgs.length > 0 ? Math.max(...allMsgs.map(m => m.time)) : 0;
-                            const repairIds = allMsgs.filter(m => !!m.ciphertext).map(m => m.msgId);
+                            const repairMsgIds = allMsgs.filter(m => !!m.ciphertext).map(m => m.msgId);
                             console.log(`[DEBUG-SYNC] Solicitando Sincronización Automática a ${remoteDeviceId}...`);
-                            conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds: repairIds });
+                            conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds });
                         }
                     }
                     if (this.onRefresh) this.onRefresh();
@@ -310,9 +310,13 @@ export const PeerService: IPeerService = {
                     const allContactos = await BitChatAuth.obtenerContactos(), filteredContactos: ContactMap = {}, allowedChatIds: string[] = [];
                     for (const id in allContactos) { if (allContactos[id].syncAllowedDevices?.includes(requestingDevice.deviceId)) { filteredContactos[id] = allContactos[id]; allowedChatIds.push(id); } }
                     const allMensajes = await DB.getAllMessages();
+                    const isRepair = (paquete.repairMsgIds && paquete.repairMsgIds.length > 0);
                     const deltaMensajes = allMensajes.filter(m => {
-                        if (!m.msgId) return false; // ID del mensaje como mínimo para transmisión
-                        return allowedChatIds.includes(m.chatId) && (m.time > (paquete.lastMessageTime || 0) || paquete.repairMsgIds?.includes(m.msgId));
+                        if (!m.msgId) return false;
+                        const isAllowed = allowedChatIds.includes(m.chatId);
+                        if (!isAllowed) return false;
+                        if (isRepair) return true; // Si es reparación, mandamos todo lo que tenemos de este chat
+                        return m.time > (paquete.lastMessageTime || 0);
                     });
                     for (const m of deltaMensajes) {
                         if (m.msg === '[Mensaje Cifrado]' && m.ciphertext && m.iv) {
@@ -442,7 +446,7 @@ export const PeerService: IPeerService = {
         if (!misCreds) return false;
         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, password);
         const allMsgs = await DB.getAllMessages(), lastTime = allMsgs.length > 0 ? Math.max(...allMsgs.map(m => m.time)) : 0;
-        const repairIds = allMsgs.filter(m => m.msg === '[Mensaje Cifrado]' && m.iv).map(m => m.msgId);
+        const repairMsgIds = allMsgs.filter(m => m.msg === '[Mensaje Cifrado]' && m.iv).map(m => m.msgId);
         return new Promise((resolve) => {
             const probePeer = new Peer(`bc-sync-probe-${crypto.randomUUID().substring(0, 8)}`);
             let foundAny = false;
@@ -450,7 +454,7 @@ export const PeerService: IPeerService = {
                 hashString(misCreds.idPublico).then(hash => {
                     const conn = probePeer.connect(`bc-v2-${hash.substring(0, 24)}`);
                     const timeout = setTimeout(() => { if (!foundAny) { probePeer.destroy(); resolve(false); } }, 8000);
-                    conn.on('open', () => { foundAny = true; conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds: repairIds }); });
+                    conn.on('open', () => { foundAny = true; conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds }); });
                     conn.on('data', async (data: unknown) => {
                         const paquete = data as IPaqueteData;
                         if (paquete.tipo === 'SYNC_DATA') {

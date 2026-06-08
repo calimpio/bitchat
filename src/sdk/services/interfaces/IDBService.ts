@@ -40,16 +40,13 @@ export interface IDBService {
      * Encrypts and adds a message to the database. 
      * If msgId exists, it updates the existing record instead of creating a duplicate.
      */
-    addMessage(msg: Message): Promise<number | undefined>;
+    addMessage(msg: Message): Promise<string | undefined>;
 
     /** Retrieves and decrypts all messages from the database. */
     getAllMessages(): Promise<Message[]>;
 
     /** Bulk imports messages (used during device synchronization). */
     importMessages(messages: Message[]): Promise<void>;
-
-    /** Updates properties of a message by its autoincrement ID. */
-    updateMessage(id: number, updates: Partial<Message>): Promise<void>;
 
     /** Updates properties of a message by its unique cryptographic msgId. */
     updateMessageByMsgId(msgId: string, updates: Partial<Message>): Promise<void>;
