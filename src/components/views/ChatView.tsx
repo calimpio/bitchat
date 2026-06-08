@@ -83,9 +83,19 @@ export const ChatView: React.FC = () => {
         refreshData();
     };
 
+    const handleClearHistory = async () => {
+        if (chatConIdPublico) {
+            if (confirm("¿Vaciar todo el historial de este chat? El contacto se mantendrá.")) {
+                await DB.deleteChat(chatConIdPublico);
+                refreshData();
+                useStore.setState({ showModalConfig: false });
+            }
+        }
+    };
+
     const handleDeleteChat = async () => {
         if (chatConIdPublico) {
-            if (confirm("¿Eliminar este historial localmente?")) {
+            if (confirm("¿Eliminar este chat y el contacto de este dispositivo?")) {
                 await DB.deleteChat(chatConIdPublico);
                 await BitChatAuth.eliminarContacto(chatConIdPublico);
                 setChatConIdPublico(null);
@@ -243,8 +253,9 @@ export const ChatView: React.FC = () => {
                             {myDevices.length === 0 && <p style={{ fontSize: '11px', color: 'var(--text-dim)', fontStyle: 'italic' }}>No se han detectado otros dispositivos vinculados.</p>}
                         </div>
                     </div>
-                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
-                        <Button variant="primary" style={{ width: '100%' }} onClick={handleDeleteChat}>Eliminar de este dispositivo</Button>
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <Button variant="ghost" style={{ width: '100%' }} onClick={handleClearHistory}>Vaciar historial de mensajes</Button>
+                        <Button variant="primary" style={{ width: '100%' }} onClick={handleDeleteChat}>Eliminar chat y contacto</Button>
                     </div>
                 </div>
             </Modal>
