@@ -302,6 +302,17 @@ export const PeerService: IPeerService = {
                         accountCreatedAt: paquete.createdAt
                     });
 
+                    // [NUEVO] Auto-autorizar este dispositivo para todos nuestros contactos
+                    const todosLosContactos = await BitChatAuth.obtenerContactos();
+                    for (const id in todosLosContactos) {
+                        const c = todosLosContactos[id];
+                        if (!c.syncAllowedDevices) c.syncAllowedDevices = [];
+                        if (!c.syncAllowedDevices.includes(remoteDeviceId)) {
+                            c.syncAllowedDevices.push(remoteDeviceId);
+                            await BitChatAuth.guardarContacto(id, c.tokenCuartaCredencial, c.insecure, c.publicKey, c.syncAllowedDevices, c.sharedSecret);
+                        }
+                    }
+
                     // Si nos envían credenciales, adoptamos la identidad pero GENERAMOS llaves de terminal propias
                     if (paquete.creds) {
                         console.log(`[SYNC] Adoptando identidad de dispositivo antiguo (${remoteDeviceId}). Generando llaves locales...`);
