@@ -212,7 +212,7 @@ export const DB: IDBService = {
         
         // Si el mensaje está legible y tenemos la llave de la bóveda, 
         // lo ciframos para persistencia local bajo el Master Password.
-        if (aesKey && msg.msg !== '[Mensaje Cifrado]' && !msg.ciphertext) {
+        if (aesKey && msg.msg !== '[Mensaje Cifrado]' && !msg.ciphertext && !msg.iv) {
             const encrypted = await this.encryptMsg(msg.msg);
             msg.msg = encrypted.ciphertext;
             msg.iv = encrypted.iv;
@@ -281,6 +281,7 @@ export const DB: IDBService = {
             if (m.iv && !m.ciphertext) {
                 try {
                     m.msg = await this.decryptMsg(m.msg, m.iv);
+                    delete m.iv; 
                 } catch (e) {
                     m.msg = '[Mensaje Cifrado]';
                 }
@@ -321,7 +322,14 @@ export const DB: IDBService = {
         });
 
         for (const m of messages) {
-            if (m.iv) m.msg = await this.decryptMsg(m.msg, m.iv);
+            if (m.iv && !m.ciphertext) {
+                try {
+                    m.msg = await this.decryptMsg(m.msg, m.iv);
+                    delete m.iv;
+                } catch (e) {
+                    m.msg = '[Mensaje Cifrado]';
+                }
+            }
         }
         return messages;
     },
@@ -337,7 +345,14 @@ export const DB: IDBService = {
         });
 
         for (const m of messages) {
-            if (m.iv) m.msg = await this.decryptMsg(m.msg, m.iv);
+            if (m.iv && !m.ciphertext) {
+                try {
+                    m.msg = await this.decryptMsg(m.msg, m.iv);
+                    delete m.iv;
+                } catch (e) {
+                    m.msg = '[Mensaje Cifrado]';
+                }
+            }
         }
         return messages;
     },
