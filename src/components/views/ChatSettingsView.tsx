@@ -26,34 +26,39 @@ export const ChatSettingsView: React.FC = () => {
     }, []);
 
     const toggleGlobalSyncPermission = async (deviceId: string) => {
-        // Toggle permission for ALL contacts for this device
         const contactIds = Object.keys(allContactos);
-        const localDeviceId = localStorage.getItem('bit_device_id');
-        
-        if (deviceId === localDeviceId) return;
+        const allowedCount = contactIds.filter(id => allContactos[id].syncAllowedDevices?.includes(deviceId)).length;
+        const isFullyAllowed = contactIds.length > 0 && allowedCount === contactIds.length;
 
-        let anyAdded = false;
-        let anyRemoved = false;
+        if (!isFullyAllowed) {
+            const confirmAction = window.confirm(`¿Estás seguro de autorizar a este dispositivo (${deviceId}) para sincronizar TODOS tus chats? Esto le dará acceso completo a tu historial actual y futuro.`);
+            if (!confirmAction) return;
+        }
+
+        // Toggle permission for ALL contacts for this device
+        const localDeviceId = localStorage.getItem('bit_device_id');
+        if (deviceId === localDeviceId) return;
 
         for (const id of contactIds) {
             const contact = allContactos[id];
             const currentAllowed = contact.syncAllowedDevices || [];
             
-            if (currentAllowed.includes(deviceId)) {
-                anyRemoved = true;
+            if (isFullyAllowed) {
+                // Revocar todo
                 const newAllowed = currentAllowed.filter(d => d !== deviceId);
-                await BitChatAuth.guardarContacto(id, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, newAllowed);
+                await BitChatAuth.guardarContacto(id, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, newAllowed, contact.sharedSecret);
                 PeerService._replicateContact(id);
             } else {
-                anyAdded = true;
-                const newAllowed = [...currentAllowed, deviceId];
-                await BitChatAuth.guardarContacto(id, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, newAllowed);
-                PeerService._replicateContact(id);
+                // Autorizar todo
+                if (!currentAllowed.includes(deviceId)) {
+                    const newAllowed = [...currentAllowed, deviceId];
+                    await BitChatAuth.guardarContacto(id, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, newAllowed, contact.sharedSecret);
+                    PeerService._replicateContact(id);
+                }
             }
         }
         
         refreshData();
-        alert(anyAdded ? `Acceso concedido a todos los chats para ${deviceId}` : `Acceso revocado a todos los chats para ${deviceId}`);
     };
 
     return (
@@ -64,14 +69,13 @@ export const ChatSettingsView: React.FC = () => {
             </div>
 
             <Card style={{ padding: '20px' }}>
-                <h3 style={{ color: 'var(--accent-blue)', fontSize: '16px', marginBottom: '10px' }}>Sincronización de Dispositivos</h3>
+                <h3 style={{ color: 'var(--accent-blue)', fontSize: '16px', marginBottom: '10px' }}>Sincronización Global de Dispositivos</h3>
                 <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '20px' }}>
-                    Gestiona qué terminales tienen permiso para sincronizar tus conversaciones de bitChat de forma global.
+                    Autoriza qué terminales tienen permiso para replicar automáticamente todas tus conversaciones.
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {devices.map(dev => {
-                        // Check if ALL contacts allow this device (for simplicity in this view)
                         const contactIds = Object.keys(allContactos);
                         const allowedCount = contactIds.filter(id => allContactos[id].syncAllowedDevices?.includes(dev.deviceId)).length;
                         const isFullyAllowed = contactIds.length > 0 && allowedCount === contactIds.length;
@@ -84,23 +88,41 @@ export const ChatSettingsView: React.FC = () => {
                                         <p style={{ fontWeight: 'bold', fontSize: '14px', marginBottom: '4px' }}>{dev.label}</p>
                                         <p style={{ fontSize: '11px', color: 'var(--text-dim)' }}>ID: {dev.deviceId}</p>
                                         <p style={{ fontSize: '11px', color: isFullyAllowed ? 'var(--success)' : (isPartiallyAllowed ? 'var(--accent-blue)' : 'var(--text-dim)'), marginTop: '8px' }}>
-                                            {isFullyAllowed ? 'Sincronización Total Activa' : (isPartiallyAllowed ? `Sincronizando ${allowedCount} de ${contactIds.length} chats` : 'Sincronización Desactivada')}
+                                            {isFullyAllowed ? 'Sincronización Total Activa' : (isPartiallyAllowed ? `Autorizado en ${allowedCount} de ${contactIds.length} chats` : 'Acceso Denegado')}
                                         </p>
                                     </div>
-                                    <Button 
-                                        variant={isFullyAllowed ? 'success' : 'ghost'} 
-                                        className="btn-sm"
+                                    <div 
                                         onClick={() => toggleGlobalSyncPermission(dev.deviceId)}
+                                        style={{ 
+                                            width: '50px', 
+                                            height: '26px', 
+                                            background: isFullyAllowed ? 'var(--success)' : '#444', 
+                                            borderRadius: '26px', 
+                                            position: 'relative', 
+                                            cursor: 'pointer',
+                                            transition: 'background 0.3s',
+                                            border: '1px solid rgba(255,255,255,0.1)'
+                                        }}
                                     >
-                                        {isFullyAllowed ? 'Revocar Todo' : 'Autorizar Todo'}
-                                    </Button>
+                                        <div style={{ 
+                                            width: '20px', 
+                                            height: '20px', 
+                                            background: '#fff', 
+                                            borderRadius: '50%', 
+                                            position: 'absolute', 
+                                            top: '2px', 
+                                            left: isFullyAllowed ? '26px' : '2px',
+                                            transition: 'left 0.3s',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                                        }} />
+                                    </div>
                                 </div>
                             </div>
                         );
                     })}
                     {devices.length === 0 && (
                         <p style={{ textAlign: 'center', color: 'var(--text-dim)', fontStyle: 'italic', fontSize: '13px' }}>
-                            No hay otros dispositivos vinculados a esta identidad.
+                            No hay otros dispositivos vinculados.
                         </p>
                     )}
                 </div>

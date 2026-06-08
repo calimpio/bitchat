@@ -166,15 +166,23 @@ export const PeerService: IPeerService = {
     async buscarDispositivos(): Promise<void> {
         const misCreds = await BitChatAuth.obtenerMisCredenciales();
         if (!misCreds) return;
-        const hashedId = await hashString(misCreds.idPublico);
-        const baseId = `bc-v2-${hashedId.substring(0, 24)}`;
-        console.log('Iniciando búsqueda de terminales en la red privada...');
-        this.conectarADispositivoPersonal(baseId);
         
-        // Intentar conectar con terminales secundarias si las conocemos
+        console.log('Iniciando búsqueda selectiva de terminales autorizadas...');
+        const contactos = await BitChatAuth.obtenerContactos();
+        const authorizedDeviceIds = new Set<string>();
+        
+        for (const id in contactos) {
+            contactos[id].syncAllowedDevices?.forEach(dId => authorizedDeviceIds.add(dId));
+        }
+
+        const baseHashedId = await hashString(misCreds.idPublico);
+        const basePeerId = `bc-v2-${baseHashedId.substring(0, 24)}`;
+        
+        // Conectar al base ID solo si está en la lista de autorizados o si queremos forzar el descubrimiento inicial (en bitDevices)
+        // Pero para el background sync, solo lo que el usuario permitió.
         const devices = await DB.getDevices();
         for (const dev of devices) {
-            if (dev.peerId && dev.peerId !== this.peer?.id) {
+            if (authorizedDeviceIds.has(dev.deviceId) && dev.peerId && dev.peerId !== this.peer?.id) {
                 this.conectarADispositivoPersonal(dev.peerId);
             }
         }
@@ -323,17 +331,6 @@ export const PeerService: IPeerService = {
                         publicKey: paquete.publicKey,
                         accountCreatedAt: paquete.createdAt
                     });
-
-                    // [NUEVO] Auto-autorizar este dispositivo para todos nuestros contactos
-                    const todosLosContactos = await BitChatAuth.obtenerContactos();
-                    for (const id in todosLosContactos) {
-                        const c = todosLosContactos[id];
-                        if (!c.syncAllowedDevices) c.syncAllowedDevices = [];
-                        if (!c.syncAllowedDevices.includes(remoteDeviceId)) {
-                            c.syncAllowedDevices.push(remoteDeviceId);
-                            await BitChatAuth.guardarContacto(id, c.tokenCuartaCredencial, c.insecure, c.publicKey, c.syncAllowedDevices, c.sharedSecret);
-                        }
-                    }
 
                     // Si nos envían credenciales, adoptamos la identidad pero GENERAMOS llaves de terminal propias
                     if (paquete.creds) {
@@ -654,20 +651,6 @@ export const PeerService: IPeerService = {
 
                             const validados = mensajes.filter(m => m.msgId || m.time);
                             await DB.importMessages(validados);
-
-                            // [NUEVO] Al sincronizar manualmente, auto-autorizamos dispositivos para mantener consistencia
-                            const remoteDeviceId = conn.peer?.replace('bc-v2-', '').split('-')[0];
-                            if (remoteDeviceId) {
-                                const allContacts = await BitChatAuth.obtenerContactos();
-                                for (const id in allContacts) {
-                                    const c = allContacts[id];
-                                    if (!c.syncAllowedDevices) c.syncAllowedDevices = [];
-                                    if (!c.syncAllowedDevices.includes(remoteDeviceId)) {
-                                        c.syncAllowedDevices.push(remoteDeviceId);
-                                        await BitChatAuth.guardarContacto(id, c.tokenCuartaCredencial, c.insecure, c.publicKey, c.syncAllowedDevices, c.sharedSecret);
-                                    }
-                                }
-                            }
 
                             probePeer.destroy();
                             resolve(true);
