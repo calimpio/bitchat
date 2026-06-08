@@ -111,6 +111,11 @@ export interface IPeerService {
         handleSecurityAlert: (paquete: any) => Promise<void>;
         handleConnectionReq: (conn: DataConnection, paquete: any) => Promise<void>;
         handleSyncData: (conn: DataConnection, paquete: any) => Promise<void>;
+        handleConnectionAccepted: (conn: DataConnection, paquete: any) => Promise<void>;
+        handleHandshakeStart: (conn: DataConnection, paquete: any) => Promise<void>;
+        handleHandshakeFinal: (conn: DataConnection, paquete: any) => Promise<void>;
+        handleMsgAck: (paquete: any) => Promise<void>;
+        handleConnectionRejected: (paquete: any) => Promise<void>;
     };
 
     /** Internal router for client-side responses. */

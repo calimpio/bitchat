@@ -211,6 +211,47 @@ export const PeerService: IPeerService = {
             }
             await DB.importMessages(validados);
             if (PeerService.onRefresh) PeerService.onRefresh();
+        },
+
+        async handleConnectionAccepted(conn: DataConnection, paquete: any) {
+            const misCreds = await BitChatAuth.obtenerMisCredenciales();
+            if (misCreds) {
+                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
+                conn.send({ tipo: 'HANDSHAKE_START', miIdPublico: misCreds.idPublico, cuartaCredencial: miCuarta, publicKey: misCreds.publicKey! });
+            }
+        },
+
+        async handleHandshakeStart(conn: DataConnection, paquete: any) {
+            const credsStart = await BitChatAuth.obtenerMisCredenciales();
+            if (credsStart) {
+                const miCuarta = await generarCuartaCredencial(credsStart.idPublico, credsStart.idPrivado, useStore.getState().masterPassword);
+                await BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencial, false, paquete.publicKey);
+                PeerService._replicateContact(paquete.miIdPublico);
+                conn.send({ tipo: 'HANDSHAKE_FINAL', miIdPublico: credsStart.idPublico, cuartaCredencialAmigo: miCuarta, publicKey: credsStart.publicKey! });
+                PeerService._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencial, conn);
+            }
+        },
+
+        async handleHandshakeFinal(conn: DataConnection, paquete: any) {
+            const credsFinal = await BitChatAuth.obtenerMisCredenciales();
+            if (credsFinal) {
+                const miCuarta = await generarCuartaCredencial(credsFinal.idPublico, credsFinal.idPrivado, useStore.getState().masterPassword);
+                await BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencialAmigo, false, paquete.publicKey);
+                PeerService._replicateContact(paquete.miIdPublico);
+                PeerService._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencialAmigo, conn);
+                PeerService._enviarPendientes(paquete.miIdPublico, conn);
+                if (PeerService.onRefresh) PeerService.onRefresh();
+            }
+        },
+
+        async handleMsgAck(paquete: any) {
+            await DB.updateMessageByMsgId(paquete.msgId, { status: paquete.read ? 'read' : 'sent' });
+            if (PeerService.onRefresh) PeerService.onRefresh();
+        },
+
+        async handleConnectionRejected(paquete: any) {
+            useStore.getState().solicitudesEnviadasPendientes.delete(paquete.deIdPublico);
+            if (PeerService.onRefresh) PeerService.onRefresh();
         }
     },
 
@@ -443,42 +484,11 @@ export const PeerService: IPeerService = {
             case 'SECURITY_ALERT': await this._server!.handleSecurityAlert(paquete); break;
             case 'CONNECTION_REQ': await this._server!.handleConnectionReq(conn, paquete); break;
             case 'SYNC_DATA': await this._server!.handleSyncData(conn, paquete); break;
-            case 'CONNECTION_REJECTED': 
-                useStore.getState().solicitudesEnviadasPendientes.delete(paquete.deIdPublico); 
-                if (this.onRefresh) this.onRefresh(); 
-                break;
-            case 'CONNECTION_ACCEPTED':
-                const misCreds = await BitChatAuth.obtenerMisCredenciales();
-                if (misCreds) {
-                    const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
-                    conn.send({ tipo: 'HANDSHAKE_START', miIdPublico: misCreds.idPublico, cuartaCredencial: miCuarta, publicKey: misCreds.publicKey! });
-                }
-                break;
-            case 'HANDSHAKE_START':
-                const credsStart = await BitChatAuth.obtenerMisCredenciales();
-                if (credsStart) {
-                    const miCuarta = await generarCuartaCredencial(credsStart.idPublico, credsStart.idPrivado, useStore.getState().masterPassword);
-                    await BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencial, false, paquete.publicKey);
-                    this._replicateContact(paquete.miIdPublico);
-                    conn.send({ tipo: 'HANDSHAKE_FINAL', miIdPublico: credsStart.idPublico, cuartaCredencialAmigo: miCuarta, publicKey: credsStart.publicKey! });
-                    this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencial, conn);
-                }
-                break;
-            case 'HANDSHAKE_FINAL':
-                const credsFinal = await BitChatAuth.obtenerMisCredenciales();
-                if (credsFinal) {
-                    const miCuarta = await generarCuartaCredencial(credsFinal.idPublico, credsFinal.idPrivado, useStore.getState().masterPassword);
-                    await BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencialAmigo, false, paquete.publicKey);
-                    this._replicateContact(paquete.miIdPublico);
-                    this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencialAmigo, conn);
-                    this._enviarPendientes(paquete.miIdPublico, conn);
-                    if (this.onRefresh) this.onRefresh();
-                }
-                break;
-            case 'MSG_ACK':
-                await DB.updateMessageByMsgId(paquete.msgId, { status: paquete.read ? 'read' : 'sent' });
-                if (this.onRefresh) this.onRefresh();
-                break;
+            case 'CONNECTION_ACCEPTED': await this._server!.handleConnectionAccepted(conn, paquete); break;
+            case 'HANDSHAKE_START': await this._server!.handleHandshakeStart(conn, paquete); break;
+            case 'HANDSHAKE_FINAL': await this._server!.handleHandshakeFinal(conn, paquete); break;
+            case 'MSG_ACK': await this._server!.handleMsgAck(paquete); break;
+            case 'CONNECTION_REJECTED': await this._server!.handleConnectionRejected(paquete); break;
         }
     },
 
@@ -629,7 +639,7 @@ export const PeerService: IPeerService = {
             try { const decrypted = await DB.decryptMsg(msgCopy.msg, msgCopy.iv); if (decrypted !== '[Decryption Error]') { msgCopy.msg = decrypted; msgCopy.iv = undefined; } } catch (e) { }
         }
         if (msgCopy.msg === '[Mensaje Cifrado]' && msgCopy.ciphertext && msgCopy.iv) {
-            const sharedKey = await this._getSharedKey(msgCopy.chatId);
+            const sharedKey = await PeerService._getSharedKey(msgCopy.chatId);
             if (sharedKey) { try { msgCopy.msg = await CryptoService.decrypt(sharedKey, msgCopy.ciphertext, msgCopy.iv); msgCopy.ciphertext = undefined; msgCopy.iv = undefined; } catch (e) { } }
         }
         const payload = { mensajes: [msgCopy], contactos: {} };
