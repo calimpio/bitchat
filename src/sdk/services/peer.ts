@@ -59,6 +59,9 @@ export const PeerService: IPeerService = {
             // Re-trigger discovery and sync immediately upon opening
             DB.cleanInvalidMessages();
             this.startBackgroundSync();
+            
+            // [NUEVO] Intentar conectar con todas las terminales conocidas para replicación
+            this.buscarDispositivos();
         });
 
         this.peer.on('disconnected', () => {
@@ -167,6 +170,14 @@ export const PeerService: IPeerService = {
         const baseId = `bc-v2-${hashedId.substring(0, 24)}`;
         console.log('Iniciando búsqueda de terminales en la red privada...');
         this.conectarADispositivoPersonal(baseId);
+        
+        // Intentar conectar con terminales secundarias si las conocemos
+        const devices = await DB.getDevices();
+        for (const dev of devices) {
+            if (dev.peerId && dev.peerId !== this.peer?.id) {
+                this.conectarADispositivoPersonal(dev.peerId);
+            }
+        }
     },
 
     async conectarAContacto(idPublicoAmigo: string, huellaEsperada?: string): Promise<void> {
