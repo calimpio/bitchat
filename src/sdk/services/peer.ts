@@ -425,22 +425,30 @@ export const PeerService: IPeerService = {
                 if (this.onRefresh) this.onRefresh();
             }
             if (paquete.tipo === 'SYNC_REQUEST') {
+                console.log(`[DEBUG-SYNC] Recibida SYNC_REQUEST de ${conn.peer}`);
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
-                if (!misCreds) return;
+                if (!misCreds) {
+                    console.error('[DEBUG-SYNC] Error: No hay credenciales locales para procesar la sincronización.');
+                    return;
+                }
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
-                
+
                 if (paquete.cuarta === miCuarta) {
-                    console.log('SYNC: Solicitud de sincronización de dispositivo personal.');
-                    
+                    console.log('[DEBUG-SYNC] Password (cuarta) validado correctamente.');
+
                     // Identify which device is requesting sync
                     const allDevices = await DB.getDevices();
+                    console.log('[DEBUG-SYNC] Dispositivos registrados en DB:', allDevices.map(d => `${d.label} (${d.deviceId})`));
+
                     const requestingDevice = allDevices.find(d => d.peerId === conn.peer);
-                    
+
                     if (!requestingDevice) {
-                        console.warn('SYNC: Dispositivo no registrado. Sincronización denegada.');
+                        console.warn(`[DEBUG-SYNC] Denegado: El Peer ID ${conn.peer} no está vinculado como bitDevice.`);
                         conn.close();
                         return;
                     }
+
+                    console.log(`[DEBUG-SYNC] Procesando sync para dispositivo: ${requestingDevice.label} (${requestingDevice.deviceId})`);
 
                     const allContactos = await BitChatAuth.obtenerContactos();
                     const filteredContactos: ContactMap = {};
@@ -449,7 +457,9 @@ export const PeerService: IPeerService = {
                     // Filter contacts based on permissions (using deviceId)
                     for (const id in allContactos) {
                         const c = allContactos[id];
-                        if (c.syncAllowedDevices?.includes(requestingDevice.deviceId)) {
+                        const isAllowed = c.syncAllowedDevices?.includes(requestingDevice.deviceId);
+                        console.log(`[DEBUG-SYNC] Chat ${id}: ${isAllowed ? 'AUTORIZADO' : 'DENEGADO'} para este dispositivo.`);
+                        if (isAllowed) {
                             filteredContactos[id] = c;
                             allowedChatIds.push(id);
                         }
@@ -458,21 +468,24 @@ export const PeerService: IPeerService = {
                     const allMensajes = await DB.getAllMessages();
                     const filteredMensajes = allMensajes.filter(m => allowedChatIds.includes(m.chatId));
 
-                    console.log(`SYNC: Enviando ${Object.keys(filteredContactos).length} contactos y ${filteredMensajes.length} mensajes autorizados.`);
+                    console.log(`[DEBUG-SYNC] Enviando ${Object.keys(filteredContactos).length} contactos y ${filteredMensajes.length} mensajes autorizados.`);
                     conn.send({ tipo: 'SYNC_DATA', contactos: filteredContactos, mensajes: filteredMensajes });
                 } else {
-                    console.warn('SYNC: Intento de sincronización con password incorrecto.');
+                    console.warn('[DEBUG-SYNC] Intento de sincronización fallido: Password incorrecto.');
                     conn.close();
                 }
             }
             if (paquete.tipo === 'SYNC_DATA') {
+                console.log(`[DEBUG-SYNC] Recibido paquete SYNC_DATA con ${Object.keys(paquete.contactos).length} contactos y ${paquete.mensajes.length} mensajes.`);
                 for (const idPublico in paquete.contactos) {
                     const c = paquete.contactos[idPublico];
-                    await BitChatAuth.guardarContacto(idPublico, c.tokenCuartaCredencial, c.insecure, c.publicKey);
+                    console.log(`[DEBUG-SYNC] Importando contacto: ${idPublico}`);
+                    await BitChatAuth.guardarContacto(idPublico, c.tokenCuartaCredencial, c.insecure, c.publicKey, c.syncAllowedDevices);
                     delete this.sharedKeys[idPublico];
                 }
+                console.log(`[DEBUG-SYNC] Importando ${paquete.mensajes.length} mensajes a IndexedDB...`);
                 await DB.importMessages(paquete.mensajes);
-                console.log("Sincronización completada con éxito.");
+                console.log("[DEBUG-SYNC] Sincronización completada con éxito.");
                 if (this.onRefresh) this.onRefresh();
             }
         });
