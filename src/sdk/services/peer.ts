@@ -148,7 +148,7 @@ export const PeerService: IPeerService = {
                 const payload = { contactos: filteredContactos, mensajes: deltaMensajes };
                 const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, requestingDevice.publicKey || misCreds.publicKey!);
                 
-                if (paquete.reqId) await PeerService.respond(conn, paquete.reqId, 'SYNC_DATA', { vault });
+                if (paquete.reqId) await PeerService.response(conn, paquete.reqId, 'SYNC_DATA', { vault });
                 else conn.send({ tipo: 'SYNC_DATA', vault });
             } else { conn.close(); }
         },
@@ -159,7 +159,10 @@ export const PeerService: IPeerService = {
             if (sharedKey) { try { decryptedText = await CryptoService.decrypt(sharedKey, paquete.txt, paquete.iv); isDecrypted = true; } catch (e) { } }
             const chatMsg: Message = { msgId: paquete.msgId, chatId: paquete.miIdPublico!, de: paquete.miIdPublico!, msg: decryptedText, time: paquete.time, status: 'read', secure: true, iv: isDecrypted ? undefined : paquete.iv, ciphertext: isDecrypted ? undefined : paquete.txt };
             await DB.addMessage(chatMsg);
-            conn.send({ tipo: 'MSG_ACK', msgId: paquete.msgId, read: true });
+            
+            if (paquete.reqId) await PeerService.response(conn, paquete.reqId, 'MSG_ACK', { msgId: paquete.msgId, read: true });
+            else conn.send({ tipo: 'MSG_ACK', msgId: paquete.msgId, read: true });
+
             PeerService._replicateMessage(chatMsg);
             if (PeerService.onMessage) PeerService.onMessage(paquete.miIdPublico!);
             if (PeerService.onRefresh) PeerService.onRefresh();
@@ -701,8 +704,16 @@ export const PeerService: IPeerService = {
         });
     },
 
-    async respond(conn: DataConnection, reqId: string, tipo: string, payload: any): Promise<void> {
+    async response(conn: DataConnection, reqId: string, tipo: string, payload: any): Promise<void> {
         const misCreds = await BitChatAuth.obtenerMisCredenciales();
-        if (conn.open) { conn.send({ tipo, reqId, isResponse: true, miIdPublico: misCreds?.idPublico, ...payload }); }
+        if (conn.open) {
+            conn.send({
+                tipo,
+                reqId,
+                isResponse: true,
+                miIdPublico: misCreds?.idPublico,
+                ...payload
+            });
+        }
     }
-};
+    };

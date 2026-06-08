@@ -100,7 +100,7 @@ export interface IPeerService {
     request<T>(conn: DataConnection, tipo: string, payload: any): Promise<T>;
 
     /** Sends a response to a previous request. (RPC Model) */
-    respond(conn: DataConnection, reqId: string, tipo: string, payload: any): Promise<void>;
+    response(conn: DataConnection, reqId: string, tipo: string, payload: any): Promise<void>;
 
     /** Internal server handlers for incoming requests. (For architecture separation) */
     _server?: {
