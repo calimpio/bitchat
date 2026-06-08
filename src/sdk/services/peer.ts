@@ -14,6 +14,7 @@ export const PeerService: IPeerService = {
     sharedKeys: {},
     onRefresh: null,
     onMessage: null,
+    deviceConns: {},
     localDeviceId: undefined,
     localEnvLabel: undefined,
 
@@ -214,6 +215,11 @@ export const PeerService: IPeerService = {
             for (const id in this.conexionesP2PDirectas) {
                 if (this.conexionesP2PDirectas[id].conn === conn) { delete this.conexionesP2PDirectas[id].conn; if (this.onRefresh) this.onRefresh(); break; }
             }
+            if (this.deviceConns) {
+                for (const deviceId in this.deviceConns) {
+                    if (this.deviceConns[deviceId] === conn) { delete this.deviceConns[deviceId]; break; }
+                }
+            }
         });
 
         conn.on('data', async (data: unknown) => {
@@ -227,6 +233,7 @@ export const PeerService: IPeerService = {
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                 if (paquete.cuarta === miCuarta) {
                     const remoteDeviceId = paquete.deviceId || conn.peer!.replace('bc-v2-', '').split('-')[0];
+                    if (this.deviceConns) this.deviceConns[remoteDeviceId] = conn;
                     await DB.addDevice({ deviceId: remoteDeviceId, idPublico: paquete.deIdPublico, label: paquete.deviceLabel || 'Otra Terminal', isOnline: true, lastSeen: Date.now(), peerId: conn.peer });
                     conn.send({ tipo: 'IDENTITY_MATCH', deviceId: this.localDeviceId, deviceLabel: this.localEnvLabel });
                     if (this.onRefresh) this.onRefresh();
@@ -235,6 +242,7 @@ export const PeerService: IPeerService = {
             if (paquete.tipo === 'IDENTITY_MATCH') {
                 const remoteDeviceId = paquete.deviceId || conn.peer?.replace('bc-v2-', '').split('-')[0];
                 if (remoteDeviceId) {
+                    if (this.deviceConns) this.deviceConns[remoteDeviceId] = conn;
                     await DB.addDevice({ deviceId: remoteDeviceId, idPublico: conn.peer!.replace('bc-v2-', '').split('-')[0], label: paquete.deviceLabel || 'Otra Terminal', isOnline: true, lastSeen: Date.now(), peerId: conn.peer });
 
                     if (!this.syncSessions[remoteDeviceId]) {
@@ -295,6 +303,7 @@ export const PeerService: IPeerService = {
                 const chatMsg: Message = { msgId: paquete.msgId, chatId: paquete.miIdPublico!, de: paquete.miIdPublico!, msg: decryptedText, time: paquete.time, status: 'read', secure: true, iv: isDecrypted ? undefined : paquete.iv, ciphertext: isDecrypted ? undefined : paquete.txt };
                 await DB.addMessage(chatMsg);
                 conn.send({ tipo: 'MSG_ACK', msgId: paquete.msgId, read: true });
+                this._replicateMessage(chatMsg);
                 if (this.onMessage) this.onMessage(paquete.miIdPublico!);
                 if (this.onRefresh) this.onRefresh();
             }
@@ -427,7 +436,9 @@ export const PeerService: IPeerService = {
         const misCreds = await BitChatAuth.obtenerMisCredenciales();
         if (!misCreds) return;
         const sharedKey = await this._getSharedKey(idPublicoAmigo), uniqueId = crypto.randomUUID();
-        await DB.addMessage({ msgId: uniqueId, chatId: idPublicoAmigo, de: misCreds.idPublico, msg: texto, time: Date.now(), status: 'saved', secure: true });
+        const chatMsg: Message = { msgId: uniqueId, chatId: idPublicoAmigo, de: misCreds.idPublico, msg: texto, time: Date.now(), status: 'saved', secure: true };
+        await DB.addMessage(chatMsg);
+        this._replicateMessage(chatMsg);
         const info = this.conexionesP2PDirectas[idPublicoAmigo];
         if (info?.status === 'SECURE' && sharedKey && this.peer) {
             const { ciphertext, iv } = await CryptoService.encrypt(sharedKey, texto);
@@ -489,5 +500,40 @@ export const PeerService: IPeerService = {
                 });
             });
         });
+    },
+
+    async _replicateMessage(msg: Message): Promise<void> {
+        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        if (!misCreds || !misCreds.publicKey || !this.deviceConns) return;
+
+        const contactos = await BitChatAuth.obtenerContactos();
+        const contact = contactos[msg.chatId];
+        if (!contact || !contact.syncAllowedDevices || contact.syncAllowedDevices.length === 0) return;
+
+        // Ensure message is decrypted for transmission between personal devices
+        const msgCopy = { ...msg };
+        if (msgCopy.msg === '[Mensaje Cifrado]' && msgCopy.ciphertext && msgCopy.iv) {
+            const sharedKey = await this._getSharedKey(msgCopy.chatId);
+            if (sharedKey) { 
+                try { 
+                    msgCopy.msg = await CryptoService.decrypt(sharedKey, msgCopy.ciphertext, msgCopy.iv); 
+                    msgCopy.ciphertext = undefined; 
+                    msgCopy.iv = undefined; 
+                } catch (e) { } 
+            }
+        }
+
+        const payload = { mensajes: [msgCopy], contactos: {} };
+        const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, misCreds.publicKey!);
+
+        for (const deviceId in this.deviceConns) {
+            if (contact.syncAllowedDevices.includes(deviceId) && deviceId !== this.localDeviceId) {
+                const conn = this.deviceConns[deviceId];
+                if (conn.open) {
+                    console.log(`[REPLICACIÓN] Enviando mensaje ${msg.msgId} a dispositivo ${deviceId}`);
+                    conn.send({ tipo: 'SYNC_DATA', vault });
+                }
+            }
+        }
     }
 };

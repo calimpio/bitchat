@@ -1,4 +1,5 @@
 import { DataConnection, Peer } from 'peerjs';
+import { Message } from '../../models/types.ts';
 
 /**
  * IPeerService manages P2P connectivity, signaling, and E2EE messaging using PeerJS.
@@ -25,6 +26,9 @@ export interface IPeerService {
 
     /** Callback triggered when a new message is received. */
     onMessage: ((chatId: string) => void) | null;
+
+    /** Map of active connections to personal devices for replication. */
+    deviceConns?: Record<string, DataConnection>;
 
     /** Persistent ID for this terminal. */
     localDeviceId?: string;
@@ -79,4 +83,7 @@ export interface IPeerService {
      * to transfer contacts and history.
      */
     iniciarSincronizacion(password: string): Promise<boolean>;
+
+    /** Replicates a single message to online authorized personal devices in real-time. */
+    _replicateMessage(msg: Message): Promise<void>;
 }
