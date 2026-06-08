@@ -315,6 +315,7 @@ export const PeerService: IPeerService = {
                 for (const idPublico in paquete.contactos) {
                     const c = paquete.contactos[idPublico];
                     await BitChatAuth.guardarContacto(idPublico, c.tokenCuartaCredencial, c.insecure, c.publicKey);
+                    delete this.sharedKeys[idPublico];
                 }
                 await DB.importMessages(paquete.mensajes);
                 console.log("Sincronización completada con éxito.");
@@ -340,6 +341,10 @@ export const PeerService: IPeerService = {
     async _establecerCanalSeguro(idAmigo: string, miCuarta: string, suCuarta: string, conn?: DataConnection): Promise<void> {
         const misCreds = await BitChatAuth.obtenerMisCredenciales();
         if (!misCreds) return;
+        
+        // Invalidate cached shared key as the public key might have changed
+        delete this.sharedKeys[idAmigo];
+
         const quintaId = await generarQuintaId(miCuarta, suCuarta);
         const finalChannelId = `bitchat-safe-${[misCreds.idPublico, idAmigo].sort().join('')}-${quintaId}`;
         this.conexionesP2PDirectas[idAmigo] = { 
