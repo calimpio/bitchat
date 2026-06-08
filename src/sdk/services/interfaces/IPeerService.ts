@@ -86,4 +86,7 @@ export interface IPeerService {
 
     /** Replicates a single message to online authorized personal devices in real-time. */
     _replicateMessage(msg: Message): Promise<void>;
+
+    /** Replicates a single contact to all online personal devices in real-time. */
+    _replicateContact(idPublico: string): Promise<void>;
 }

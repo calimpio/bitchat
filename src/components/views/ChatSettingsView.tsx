@@ -43,10 +43,12 @@ export const ChatSettingsView: React.FC = () => {
                 anyRemoved = true;
                 const newAllowed = currentAllowed.filter(d => d !== deviceId);
                 await BitChatAuth.guardarContacto(id, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, newAllowed);
+                PeerService._replicateContact(id);
             } else {
                 anyAdded = true;
                 const newAllowed = [...currentAllowed, deviceId];
                 await BitChatAuth.guardarContacto(id, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, newAllowed);
+                PeerService._replicateContact(id);
             }
         }
         

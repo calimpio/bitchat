@@ -79,6 +79,7 @@ export const ChatView: React.FC = () => {
             contact.publicKey, 
             newAllowed
         );
+        PeerService._replicateContact(chatConIdPublico);
         refreshData();
     };
 

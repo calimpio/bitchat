@@ -284,6 +284,7 @@ export const PeerService: IPeerService = {
                 if (!misCreds) return;
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                 await BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencial, false, paquete.publicKey);
+                this._replicateContact(paquete.miIdPublico);
                 conn.send({ tipo: 'HANDSHAKE_FINAL', miIdPublico: misCreds.idPublico, cuartaCredencialAmigo: miCuarta, publicKey: misCreds.publicKey! });
                 this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencial, conn);
             }
@@ -292,6 +293,7 @@ export const PeerService: IPeerService = {
                 if (!misCreds) return;
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                 await BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencialAmigo, false, paquete.publicKey);
+                this._replicateContact(paquete.miIdPublico);
                 this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencialAmigo, conn);
                 this._enviarPendientes(paquete.miIdPublico, conn);
                 if (this.onRefresh) this.onRefresh();
@@ -533,6 +535,26 @@ export const PeerService: IPeerService = {
                     console.log(`[REPLICACIÓN] Enviando mensaje ${msg.msgId} a dispositivo ${deviceId}`);
                     conn.send({ tipo: 'SYNC_DATA', vault });
                 }
+            }
+        }
+    },
+
+    async _replicateContact(idPublico: string): Promise<void> {
+        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        if (!misCreds || !misCreds.publicKey || !this.deviceConns) return;
+
+        const contactos = await BitChatAuth.obtenerContactos();
+        const contact = contactos[idPublico];
+        if (!contact) return;
+
+        const payload = { mensajes: [], contactos: { [idPublico]: contact } };
+        const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, misCreds.publicKey!);
+
+        for (const deviceId in this.deviceConns) {
+            const conn = this.deviceConns[deviceId];
+            if (conn.open && deviceId !== this.localDeviceId) {
+                console.log(`[REPLICACIÓN] Enviando contacto ${idPublico} a dispositivo ${deviceId}`);
+                conn.send({ tipo: 'SYNC_DATA', vault });
             }
         }
     }
