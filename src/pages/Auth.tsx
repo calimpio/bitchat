@@ -27,6 +27,9 @@ export const AuthPage: React.FC = () => {
 
             if (typeof validationResult === 'object') {
                 console.log("[AUTH] Identidad existente detectada. Sincronizando llaves...");
+                if (!validationResult.createdAt) {
+                    validationResult.createdAt = Date.now();
+                }
                 await DB.setCreds(validationResult);
             } else {
                 console.log("[AUTH] Nueva identidad. Generando llaves...");

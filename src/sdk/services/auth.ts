@@ -93,6 +93,10 @@ export const BitChatAuth: IBitChatAuth = {
             
             const decryptedWitness = await CryptoService.decrypt(masterKey, creds.authWitness, creds.authIv);
             if (decryptedWitness === "BITCHAT_IDENTITY_OK") {
+                if (!creds.createdAt) {
+                    creds.createdAt = Date.now();
+                    await DB.setCreds(creds);
+                }
                 useStore.getState().setAesKey(masterKey);
                 // Ejecutar migración de mensajes
                 DB.migratePlainMessages();
