@@ -121,6 +121,7 @@ export interface IPaqueteSyncRequest extends IPaqueteBase {
     tipo: 'SYNC_REQUEST';
     cuarta: string;
     lastMessageTime?: number; // Delta sync: only request messages after this timestamp
+    repairMsgIds?: string[]; // IDs of messages that are locally encrypted and need decryption from a peer
 }
 
 export interface IPaqueteSyncData extends IPaqueteBase {
