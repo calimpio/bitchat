@@ -14,12 +14,15 @@ export const VaultService: IVaultService = {
         
         const plainText = JSON.stringify(content);
         const { ciphertext, iv } = await CryptoService.encrypt(aesKey, plainText);
+        const now = Date.now();
         
         return {
             label,
             content: ciphertext,
             iv,
-            method: 'master'
+            method: 'master',
+            createdAt: now,
+            updatedAt: now
         };
     },
 
@@ -57,13 +60,16 @@ export const VaultService: IVaultService = {
         // 4. Encrypt content
         const plainText = JSON.stringify(content);
         const { ciphertext, iv } = await CryptoService.encrypt(sharedKey, plainText);
+        const now = Date.now();
 
         return {
             label,
             content: ciphertext,
             iv,
             method: 'e2ee',
-            publicKey: misCreds.publicKey // Include sender's public key so receiver can derive the secret
+            publicKey: misCreds.publicKey, // Include sender's public key so receiver can derive the secret
+            createdAt: now,
+            updatedAt: now
         };
     },
 

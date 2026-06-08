@@ -4,4 +4,6 @@ export interface EncryptedVaultObject {
     iv: string; // Base64 IV
     method: 'master' | 'e2ee';
     publicKey?: JsonWebKey; // If E2EE was used
+    createdAt: number;
+    updatedAt: number;
 }
