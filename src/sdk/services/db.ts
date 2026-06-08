@@ -212,13 +212,13 @@ export const DB: IDBService = {
 
     async importMessages(messages: Message[]): Promise<void> {
         if (!this.db) return;
-        const tx = this.db.transaction('messages', 'readwrite');
-        const store = tx.objectStore('messages');
-        messages.forEach(m => {
+        for (const m of messages) {
             delete m.id;
-            store.put(m);
-        });
-        return new Promise(r => tx.oncomplete = () => r());
+            // Si el mensaje viene descifrado (desde otra instancia de DB), 
+            // quitamos el IV para que addMessage lo vuelva a cifrar con la clave local.
+            delete m.iv; 
+            await this.addMessage(m);
+        }
     },
 
     async updateMessage(id: number, updates: Partial<Message>): Promise<void> {

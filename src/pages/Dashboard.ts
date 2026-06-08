@@ -130,9 +130,9 @@ export async function DashboardPage(renderApp: () => void) {
     async function settingsView(): Promise<HTMLElement> {
         const blacklist = await DB.getBlacklist();
 
-        return h('div', { style: { flex: '1', display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '500px', margin: '0 auto', width: '100%', overflowY: 'auto'} }, [
-            h('h2', { style: { color: 'var(--primary)', textAlign: 'center'} }, 'bitOS Settings'),
-            Card({ style: { padding: '20px'} }, [
+        return h('div', { className: 'settings-view-container', style: { display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '600px', margin: '0 auto', width: '100%'} }, [
+            h('h2', { style: { color: 'var(--primary)', textAlign: 'center', marginBottom: '10px'} }, 'bitOS Settings'),
+            Card({ style: { padding: '20px', flexShrink: '0'} }, [
                 h('h4', { style: { marginBottom: '10px', color: 'var(--accent-blue)'} }, 'Dispositivo'),
                 h('div', { style: { background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', fontSize: '13px'} }, [
                     h('p', {}, `ID Público: ${misCreds.idPublico}`),
@@ -140,7 +140,7 @@ export async function DashboardPage(renderApp: () => void) {
                     h('p', { style: { color: 'var(--accent-blue)', marginTop: '5px'} }, `Huella: ${myFingerprint}`)
                 ])
             ]),
-            Card({ style: { padding: '20px'} }, [
+            Card({ style: { padding: '20px', flexShrink: '0'} }, [
                 h('h4', { style: { marginBottom: '10px', color: 'var(--primary)'} }, 'Lista Negra'),
                 h('p', { style: { fontSize: '12px', color: 'var(--text-dim)', marginBottom: '10px'} }, 'Números bloqueados que no pueden enviarte solicitudes.'),
                 h('div', { style: { display: 'flex', flexDirection: 'column', gap: '8px'} }, 
@@ -153,14 +153,14 @@ export async function DashboardPage(renderApp: () => void) {
                     ])) : [h('p', { style: { fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic'} }, 'Ningún número bloqueado')]
                 )
             ]),
-            Card({ style: { padding: '20px'} }, [
+            Card({ style: { padding: '20px', flexShrink: '0'} }, [
                 h('h4', { style: { marginBottom: '10px', color: 'var(--success)'} }, 'Diagnóstico de Red'),
                 h('div', { style: { background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', fontSize: '11px', fontFamily: 'monospace'} }, [
                     h('p', { style: { color: 'var(--text-dim)', marginBottom: '5px'} }, 'Peer ID (Ofuscado):'),
                     h('p', { style: { wordBreak: 'break-all'} }, PeerService.peer?.id || 'Generando...')
                 ])
             ]),
-            Card({ style: { padding: '20px'} }, [
+            Card({ style: { padding: '20px', flexShrink: '0'} }, [
                 h('h4', { style: { marginBottom: '10px', color: 'var(--secondary)'} }, 'Sincronización'),
                 h('p', { style: { fontSize: '12px', color: 'var(--text-dim)', marginBottom: '10px'} }, 'Vincular con otro de mis dispositivos'),
                 Input({ type: 'password', id: 'sync-pass', placeholder: 'Contraseña Maestra' }),
@@ -172,7 +172,7 @@ export async function DashboardPage(renderApp: () => void) {
                     }})
                 ])
             ]),
-            Card({ style: { padding: '20px'} }, [
+            Card({ style: { padding: '20px', flexShrink: '0'} }, [
                 h('h4', { style: { marginBottom: '10px', color: 'var(--primary)'} }, 'Seguridad'),
                 Button({ text: 'Borrar Datos Locales', variant: 'primary', onClick: async () => {
                     if (confirm("Se borrarán mensajes y contactos. ¿Continuar?")) {

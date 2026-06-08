@@ -148,7 +148,7 @@ export const PeerService: IPeerService = {
                     publicKey: misCreds.publicKey!,
                     huellaDestino: huellaEsperada
                 }); 
-                console.log(`Solicitud enviada a ${idPublicoAmigo}. Esperando respuesta...`);
+                alert(`Solicitud enviada a ${idPublicoAmigo}. Esperando respuesta...`);
             }
         });
 
@@ -305,10 +305,16 @@ export const PeerService: IPeerService = {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
                 const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                
                 if (paquete.cuarta === miCuarta) {
+                    console.log('SYNC: Password (cuarta) coincide. Preparando datos...');
                     const contactos = await BitChatAuth.obtenerContactos();
                     const mensajes = await DB.getAllMessages();
+                    console.log(`SYNC: Enviando ${Object.keys(contactos).length} contactos y ${mensajes.length} mensajes.`);
                     conn.send({ tipo: 'SYNC_DATA', contactos, mensajes });
+                } else {
+                    console.warn('SYNC: Intento de sincronización con password (cuarta) incorrecto.');
+                    conn.close();
                 }
             }
             if (paquete.tipo === 'SYNC_DATA') {
@@ -497,9 +503,11 @@ export const PeerService: IPeerService = {
                     conn.on('data', async (data: unknown) => {
                         const paquete = data as IPaqueteData;
                         if (paquete.tipo === 'SYNC_DATA') {
+                            console.log(`SYNC: Recibidos ${Object.keys(paquete.contactos).length} contactos y ${paquete.mensajes.length} mensajes.`);
                             for (const idPublico in paquete.contactos) {
                                 const c = paquete.contactos[idPublico];
                                 await BitChatAuth.guardarContacto(idPublico, c.tokenCuartaCredencial, c.insecure, c.publicKey);
+                                delete this.sharedKeys[idPublico];
                             }
                             await DB.importMessages(paquete.mensajes);
                             probePeer.destroy(); resolve(true);
