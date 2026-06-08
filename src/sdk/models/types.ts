@@ -66,12 +66,14 @@ export interface IPaqueteIdentityProbe extends IPaqueteBase {
     nonce?: string; // Challenge for Identity Probe V2
     deviceId?: string; // Persistent unique ID for the terminal
     deviceLabel?: string; // Environment info (e.g., "Windows App", "Chrome")
+    publicKey?: JsonWebKey;
 }
 
 export interface IPaqueteIdentityMatch extends IPaqueteBase {
     tipo: 'IDENTITY_MATCH';
     deviceId?: string;
     deviceLabel?: string;
+    publicKey?: JsonWebKey;
 }
 
 export interface IPaqueteSecurityAlert extends IPaqueteBase {

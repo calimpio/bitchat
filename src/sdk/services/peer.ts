@@ -234,8 +234,8 @@ export const PeerService: IPeerService = {
                 if (paquete.cuarta === miCuarta) {
                     const remoteDeviceId = paquete.deviceId || conn.peer!.replace('bc-v2-', '').split('-')[0];
                     if (this.deviceConns) this.deviceConns[remoteDeviceId] = conn;
-                    await DB.addDevice({ deviceId: remoteDeviceId, idPublico: paquete.deIdPublico, label: paquete.deviceLabel || 'Otra Terminal', isOnline: true, lastSeen: Date.now(), peerId: conn.peer });
-                    conn.send({ tipo: 'IDENTITY_MATCH', deviceId: this.localDeviceId, deviceLabel: this.localEnvLabel });
+                    await DB.addDevice({ deviceId: remoteDeviceId, idPublico: paquete.deIdPublico, label: paquete.deviceLabel || 'Otra Terminal', isOnline: true, lastSeen: Date.now(), peerId: conn.peer, publicKey: paquete.publicKey });
+                    conn.send({ tipo: 'IDENTITY_MATCH', deviceId: this.localDeviceId, deviceLabel: this.localEnvLabel, publicKey: misCreds.publicKey });
                     if (this.onRefresh) this.onRefresh();
                 } else { conn.send({ tipo: 'IDENTITY_CONFLICT' }); this._alertarContactosDeIntentoDeSecuestro(misCreds.idPublico); }
             }
@@ -243,7 +243,7 @@ export const PeerService: IPeerService = {
                 const remoteDeviceId = paquete.deviceId || conn.peer?.replace('bc-v2-', '').split('-')[0];
                 if (remoteDeviceId) {
                     if (this.deviceConns) this.deviceConns[remoteDeviceId] = conn;
-                    await DB.addDevice({ deviceId: remoteDeviceId, idPublico: conn.peer!.replace('bc-v2-', '').split('-')[0], label: paquete.deviceLabel || 'Otra Terminal', isOnline: true, lastSeen: Date.now(), peerId: conn.peer });
+                    await DB.addDevice({ deviceId: remoteDeviceId, idPublico: conn.peer!.replace('bc-v2-', '').split('-')[0], label: paquete.deviceLabel || 'Otra Terminal', isOnline: true, lastSeen: Date.now(), peerId: conn.peer, publicKey: paquete.publicKey });
 
                     if (!this.syncSessions[remoteDeviceId]) {
                         this.syncSessions[remoteDeviceId] = true;
@@ -336,9 +336,9 @@ export const PeerService: IPeerService = {
                         }
                     }
 
-                    // E2EE para dispositivos: Cifrar payload con nuestra propia llave pública
+                    // E2EE para dispositivos: Cifrar payload con la llave pública del dispositivo que solicita
                     const payload = { contactos: filteredContactos, mensajes: deltaMensajes };
-                    const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, misCreds.publicKey!);
+                    const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, requestingDevice.publicKey || misCreds.publicKey!);
                     conn.send({ tipo: 'SYNC_DATA', vault });
                 } else { conn.close(); }
             }
@@ -526,13 +526,15 @@ export const PeerService: IPeerService = {
         }
 
         const payload = { mensajes: [msgCopy], contactos: {} };
-        const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, misCreds.publicKey!);
+        const allDevices = await DB.getDevices();
 
         for (const deviceId in this.deviceConns) {
             if (contact.syncAllowedDevices.includes(deviceId) && deviceId !== this.localDeviceId) {
                 const conn = this.deviceConns[deviceId];
-                if (conn.open) {
+                const device = allDevices.find(d => d.deviceId === deviceId);
+                if (conn.open && device?.publicKey) {
                     console.log(`[REPLICACIÓN] Enviando mensaje ${msg.msgId} a dispositivo ${deviceId}`);
+                    const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, device.publicKey);
                     conn.send({ tipo: 'SYNC_DATA', vault });
                 }
             }
@@ -548,12 +550,14 @@ export const PeerService: IPeerService = {
         if (!contact) return;
 
         const payload = { mensajes: [], contactos: { [idPublico]: contact } };
-        const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, misCreds.publicKey!);
+        const allDevices = await DB.getDevices();
 
         for (const deviceId in this.deviceConns) {
             const conn = this.deviceConns[deviceId];
-            if (conn.open && deviceId !== this.localDeviceId) {
+            const device = allDevices.find(d => d.deviceId === deviceId);
+            if (conn.open && deviceId !== this.localDeviceId && device?.publicKey) {
                 console.log(`[REPLICACIÓN] Enviando contacto ${idPublico} a dispositivo ${deviceId}`);
+                const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, device.publicKey);
                 conn.send({ tipo: 'SYNC_DATA', vault });
             }
         }
