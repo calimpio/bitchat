@@ -42,6 +42,10 @@ export const ChatView: React.FC = () => {
             if (chatConIdPublico === chatId) refreshData();
             else refreshData();
         };
+
+        if (chatConIdPublico) {
+            PeerService.syncChat(chatConIdPublico);
+        }
         
         return () => {
             PeerService.onRefresh = null;

@@ -89,4 +89,7 @@ export interface IPeerService {
 
     /** Replicates a single contact to all online personal devices in real-time. */
     _replicateContact(idPublico: string): Promise<void>;
+
+    /** Actively requests a sync for a specific chat from all online personal devices. */
+    syncChat(chatId: string): Promise<void>;
 }

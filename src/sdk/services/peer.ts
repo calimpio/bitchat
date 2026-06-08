@@ -284,6 +284,17 @@ export const PeerService: IPeerService = {
                         creds: soyMasAntiguo ? misCreds : undefined,
                         createdAt: misCreds.createdAt
                     });
+
+                    // [BIDIRECCIONAL] Solicitar sincronización nosotros también al dispositivo que nos sondeó
+                    if (!this.syncSessions[remoteDeviceId]) {
+                        this.syncSessions[remoteDeviceId] = true;
+                        const allMsgs = await DB.getAllMessages();
+                        const lastTime = allMsgs.length > 0 ? Math.max(...allMsgs.map(m => m.time)) : 0;
+                        const repairMsgIds = allMsgs.filter(m => !!m.ciphertext).map(m => m.msgId);
+                        console.log(`[SYNC-DEBUG] Solicitando Sincronización Bidireccional a ${remoteDeviceId}...`);
+                        conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds });
+                    }
+
                     if (this.onRefresh) this.onRefresh();
                 } else { conn.send({ tipo: 'IDENTITY_CONFLICT' }); this._alertarContactosDeIntentoDeSecuestro(misCreds.idPublico); }
             }
@@ -712,6 +723,25 @@ export const PeerService: IPeerService = {
                 console.log(`[REPLICACIÓN] Enviando contacto ${idPublico} a dispositivo ${deviceId}`);
                 const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, device.publicKey);
                 conn.send({ tipo: 'SYNC_DATA', vault });
+            }
+        }
+    },
+
+    async syncChat(chatId: string): Promise<void> {
+        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        if (!misCreds || !this.deviceConns) return;
+
+        console.log(`[SYNC-CHAT] Solicitando sincronización proactiva para el chat: ${chatId}`);
+        const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
+        
+        const chatMsgs = await DB.getChatMessages(chatId);
+        const lastTime = chatMsgs.length > 0 ? chatMsgs[chatMsgs.length - 1].time : 0;
+        const repairMsgIds = chatMsgs.filter(m => !!m.ciphertext).map(m => m.msgId);
+
+        for (const deviceId in this.deviceConns) {
+            const conn = this.deviceConns[deviceId];
+            if (conn.open && deviceId !== this.localDeviceId) {
+                conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds });
             }
         }
     }
