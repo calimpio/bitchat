@@ -1,5 +1,4 @@
 export * from './models/types.ts';
-export * from './models/state.ts';
 export * from './models/vault.ts';
 export * from './services/interfaces/index.ts';
 export * from './services/db.ts';

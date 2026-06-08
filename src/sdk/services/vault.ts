@@ -1,5 +1,5 @@
 import { CryptoService } from './crypto.ts';
-import { Estado } from '../models/state.ts';
+import { useStore } from '../../store/useStore.ts';
 import { BitChatAuth } from './auth.ts';
 import { EncryptedVaultObject } from '../models/vault.ts';
 import { IVaultService } from './interfaces/IVaultService.ts';
@@ -9,10 +9,11 @@ export const VaultService: IVaultService = {
      * Encrypts an object so it can be decrypted by the Master Password (local)
      */
     async encryptForMe<T = unknown>(label: string, content: T): Promise<EncryptedVaultObject> {
-        if (!Estado.aesKey) throw new Error("Terminal locked: Master key not derived.");
+        const { aesKey } = useStore.getState();
+        if (!aesKey) throw new Error("Terminal locked: Master key not derived.");
         
         const plainText = JSON.stringify(content);
-        const { ciphertext, iv } = await CryptoService.encrypt(Estado.aesKey, plainText);
+        const { ciphertext, iv } = await CryptoService.encrypt(aesKey, plainText);
         
         return {
             label,
@@ -26,10 +27,11 @@ export const VaultService: IVaultService = {
      * Decrypts an object using the Master Password (local)
      */
     async decryptForMe<T = unknown>(vaultObj: EncryptedVaultObject): Promise<T> {
-        if (!Estado.aesKey) throw new Error("Terminal locked: Master key not derived.");
+        const { aesKey } = useStore.getState();
+        if (!aesKey) throw new Error("Terminal locked: Master key not derived.");
         if (vaultObj.method !== 'master') throw new Error("Invalid decryption method for Master Key.");
         
-        const decryptedJson = await CryptoService.decrypt(Estado.aesKey, vaultObj.content, vaultObj.iv);
+        const decryptedJson = await CryptoService.decrypt(aesKey, vaultObj.content, vaultObj.iv);
         return JSON.parse(decryptedJson);
     },
 
@@ -39,10 +41,11 @@ export const VaultService: IVaultService = {
      */
     async encryptForE2EE<T = unknown>(label: string, content: T, targetPublicKeyJWK: JsonWebKey): Promise<EncryptedVaultObject> {
         const misCreds = await BitChatAuth.obtenerMisCredenciales();
-        if (!misCreds || !Estado.aesKey) throw new Error("Terminal locked or identity missing.");
+        const { aesKey } = useStore.getState();
+        if (!misCreds || !aesKey) throw new Error("Terminal locked or identity missing.");
 
         // 1. Decrypt my own private key
-        const privKeyJWKJson = await CryptoService.decrypt(Estado.aesKey, misCreds.encryptedPrivateKey!, misCreds.privateKeyIv!);
+        const privKeyJWKJson = await CryptoService.decrypt(aesKey, misCreds.encryptedPrivateKey!, misCreds.privateKeyIv!);
         const myPrivKey = await crypto.subtle.importKey('jwk', JSON.parse(privKeyJWKJson), { name: 'ECDH', namedCurve: 'P-384' }, true, ['deriveKey']);
 
         // 2. Import target public key
@@ -69,10 +72,11 @@ export const VaultService: IVaultService = {
      */
     async decryptFromE2EE<T = unknown>(vaultObj: EncryptedVaultObject): Promise<T> {
         const misCreds = await BitChatAuth.obtenerMisCredenciales();
-        if (!misCreds || !Estado.aesKey || !vaultObj.publicKey) throw new Error("Missing credentials or sender public key.");
+        const { aesKey } = useStore.getState();
+        if (!misCreds || !aesKey || !vaultObj.publicKey) throw new Error("Missing credentials or sender public key.");
 
         // 1. Decrypt my own private key
-        const privKeyJWKJson = await CryptoService.decrypt(Estado.aesKey, misCreds.encryptedPrivateKey!, misCreds.privateKeyIv!);
+        const privKeyJWKJson = await CryptoService.decrypt(aesKey, misCreds.encryptedPrivateKey!, misCreds.privateKeyIv!);
         const myPrivKey = await crypto.subtle.importKey('jwk', JSON.parse(privKeyJWKJson), { name: 'ECDH', namedCurve: 'P-384' }, true, ['deriveKey']);
 
         // 2. Import sender's public key

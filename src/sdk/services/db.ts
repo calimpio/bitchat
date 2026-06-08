@@ -1,5 +1,5 @@
 import { Message, RequestRecord, Credentials } from '../models/types.ts';
-import { Estado } from '../models/state.ts';
+import { useStore } from '../../store/useStore.ts';
 import { CryptoService } from './crypto.ts';
 import { IDBService } from './interfaces/IDBService.ts';
 import { EncryptedVaultObject } from '../models/vault.ts';
@@ -153,14 +153,16 @@ export const DB: IDBService = {
     },
 
     async encryptMsg(msg: string): Promise<{ ciphertext: string, iv: string }> {
-        if (!Estado.aesKey) return { ciphertext: msg, iv: '' };
-        return await CryptoService.encrypt(Estado.aesKey, msg);
+        const { aesKey } = useStore.getState();
+        if (!aesKey) return { ciphertext: msg, iv: '' };
+        return await CryptoService.encrypt(aesKey, msg);
     },
 
     async decryptMsg(ciphertext: string, iv: string): Promise<string> {
-        if (!Estado.aesKey || !iv) return ciphertext;
+        const { aesKey } = useStore.getState();
+        if (!aesKey || !iv) return ciphertext;
         try {
-            return await CryptoService.decrypt(Estado.aesKey, ciphertext, iv);
+            return await CryptoService.decrypt(aesKey, ciphertext, iv);
         } catch (e) {
             console.error('Failed to decrypt local message', e);
             return '[Decryption Error]';
@@ -168,7 +170,8 @@ export const DB: IDBService = {
     },
 
     async addMessage(msg: Message): Promise<number | undefined> {
-        if (Estado.aesKey && !msg.iv) {
+        const { aesKey } = useStore.getState();
+        if (aesKey && !msg.iv) {
             const encrypted = await this.encryptMsg(msg.msg);
             msg.msg = encrypted.ciphertext;
             msg.iv = encrypted.iv;
@@ -311,7 +314,8 @@ export const DB: IDBService = {
     },
 
     async migratePlainMessages(): Promise<void> {
-        if (!this.db || !Estado.aesKey) return;
+        const { aesKey } = useStore.getState();
+        if (!this.db || !aesKey) return;
         const tx = this.db.transaction('messages', 'readwrite');
         const store = tx.objectStore('messages');
         const req = store.openCursor();

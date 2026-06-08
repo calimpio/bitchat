@@ -1,5 +1,5 @@
 import { DB } from './db.ts';
-import { Estado } from '../models/state.ts';
+import { useStore } from '../../store/useStore.ts';
 import { Credentials, ContactMap, Contact } from '../models/types.ts';
 import { CryptoService, arrayBufferToBase64, base64ToArrayBuffer } from './crypto.ts';
 import { IBitChatAuth } from './interfaces/IAuthService.ts';
@@ -59,13 +59,13 @@ export const BitChatAuth: IBitChatAuth = {
         };
         
         await DB.setCreds(creds);
-        Estado.me = creds;
-        Estado.aesKey = masterKey;
+        useStore.getState().setMe(creds);
+        useStore.getState().setAesKey(masterKey);
     },
 
     async obtenerMisCredenciales(): Promise<Credentials | null> {
-        if (!Estado.me) Estado.me = await DB.getCreds();
-        return Estado.me;
+        if (!useStore.getState().me) useStore.getState().setMe(await DB.getCreds());
+        return useStore.getState().me;
     },
 
     async verificarPassword(inputPassword: string): Promise<boolean> {
@@ -90,7 +90,7 @@ export const BitChatAuth: IBitChatAuth = {
             
             const decryptedWitness = await CryptoService.decrypt(masterKey, creds.authWitness, creds.authIv);
             if (decryptedWitness === "BITCHAT_IDENTITY_OK") {
-                Estado.aesKey = masterKey;
+                useStore.getState().setAesKey(masterKey);
                 return true;
             }
         } catch (e) {

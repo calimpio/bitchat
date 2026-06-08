@@ -1,0 +1,46 @@
+import React from 'react';
+import { useStore } from '../../store/useStore.ts';
+import { PeerService } from '../../sdk/index.ts';
+
+export const Sidebar: React.FC = () => {
+    const { activeApp, setActiveApp, showSidebar, setShowSidebar, setPantalla, setMasterPassword, setAesKey, setChatConIdPublico } = useStore();
+
+    const logout = () => {
+        if (PeerService.peer) PeerService.peer.destroy();
+        setPantalla('AUTH_LOGIN');
+        setActiveApp('bitChat');
+        setMasterPassword('');
+        setAesKey(null as any);
+        setChatConIdPublico(null);
+    };
+
+    return (
+        <div className={`sidebar ${showSidebar ? 'active' : ''}`}>
+            <div className="sidebar-header">
+                <h2 style={{ color: 'var(--primary)', fontSize: '20px' }}>bitOS</h2>
+                <button className="btn btn-ghost" style={{ padding: '4px' }} onClick={() => setShowSidebar(false)}>✕</button>
+            </div>
+            <div className="sidebar-content">
+                <div 
+                    className={`nav-item ${activeApp === 'bitChat' ? 'active' : ''}`} 
+                    onClick={() => setActiveApp('bitChat')}
+                >
+                    💬 bitChat
+                </div>
+                <div className="nav-item" style={{ opacity: 0.4 }}>📂 bitDrive (Prox)</div>
+                <div className="nav-item" style={{ opacity: 0.4 }}>📱 bitDevices (Prox)</div>
+            </div>
+            <div className="sidebar-footer">
+                <div 
+                    className={`nav-item ${activeApp === 'Settings' ? 'active' : ''}`} 
+                    onClick={() => { setActiveApp('Settings'); setShowSidebar(false); }}
+                >
+                    ⚙ Configuración
+                </div>
+                <div className="nav-item" style={{ color: 'var(--primary)' }} onClick={logout}>
+                    🔓 Cerrar Terminal
+                </div>
+            </div>
+        </div>
+    );
+};

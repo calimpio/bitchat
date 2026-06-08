@@ -1,10 +1,10 @@
 import { Peer, DataConnection } from 'peerjs';
 import { DB } from './db.ts';
 import { BitChatAuth, generarCuartaCredencial, generarQuintaId, hashString } from './auth.ts';
-import { Estado } from '../models/state.ts';
-import { IPaqueteData } from '../models/types.ts';
+import { AppState, IPaqueteData } from '../models/types.ts';
 import { CryptoService } from './crypto.ts';
 import { IPeerService } from './interfaces/IPeerService.ts';
+import { useStore } from '../../store/useStore.ts';
 
 export const PeerService: IPeerService = {
     peer: null,
@@ -94,7 +94,7 @@ export const PeerService: IPeerService = {
             const pending = await DB.getPendingMessages();
             const uniqueTargets = [...new Set(pending.map(m => m.chatId))];
             for (const target of uniqueTargets) { this.conectarAContacto(target); }
-            for (const target of Array.from(Estado.solicitudesEnviadasPendientes)) { this.conectarAContacto(target); }
+            for (const target of Array.from(useStore.getState().solicitudesEnviadasPendientes)) { this.conectarAContacto(target); }
         }, 15000) as unknown as number;
     },
 
@@ -120,7 +120,7 @@ export const PeerService: IPeerService = {
         });
         
         const contactos = await BitChatAuth.obtenerContactos();
-        if (!contactos[idPublicoAmigo]) { Estado.solicitudesEnviadasPendientes.add(idPublicoAmigo); }
+        if (!contactos[idPublicoAmigo]) { useStore.getState().solicitudesEnviadasPendientes.add(idPublicoAmigo); }
 
         conn.on('open', async () => {
             console.log(`Conexión abierta con ${idPublicoAmigo}`);
@@ -129,7 +129,7 @@ export const PeerService: IPeerService = {
 
             if (contactos[idPublicoAmigo]) {
                 if (!this.conexionesP2PDirectas[idPublicoAmigo] || this.conexionesP2PDirectas[idPublicoAmigo].status !== 'SECURE') {
-                    const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                    const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                     conn.send({ 
                         tipo: 'HANDSHAKE_START', 
                         miIdPublico: misCreds.idPublico, 
@@ -167,8 +167,9 @@ export const PeerService: IPeerService = {
         if (!misCreds || !contactos[idAmigo] || !contactos[idAmigo].publicKey) return null;
         
         try {
-            if (!Estado.aesKey || !misCreds.encryptedPrivateKey || !misCreds.privateKeyIv) return null;
-            const privKeyJWKJson = await CryptoService.decrypt(Estado.aesKey, misCreds.encryptedPrivateKey, misCreds.privateKeyIv);
+            const { aesKey } = useStore.getState();
+            if (!aesKey || !misCreds.encryptedPrivateKey || !misCreds.privateKeyIv) return null;
+            const privKeyJWKJson = await CryptoService.decrypt(aesKey, misCreds.encryptedPrivateKey, misCreds.privateKeyIv);
             const privKeyJWK = JSON.parse(privKeyJWKJson);
             const myPrivKey = await crypto.subtle.importKey('jwk', privKeyJWK, { name: 'ECDH', namedCurve: 'P-384' }, true, ['deriveKey']);
             const friendPubKey = await CryptoService.importPublicECDHKey(contactos[idAmigo].publicKey!);
@@ -209,7 +210,7 @@ export const PeerService: IPeerService = {
             if (paquete.tipo === 'IDENTITY_PROBE') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
-                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                 if (paquete.cuarta === miCuarta) { conn.send({ tipo: 'IDENTITY_MATCH' }); }
                 else {
                     conn.send({ tipo: 'IDENTITY_CONFLICT' });
@@ -241,13 +242,13 @@ export const PeerService: IPeerService = {
             }
             if (paquete.tipo === 'CONNECTION_REJECTED') {
                 console.log(`Solicitud rechazada por ${paquete.deIdPublico}`);
-                Estado.solicitudesEnviadasPendientes.delete(paquete.deIdPublico);
+                useStore.getState().solicitudesEnviadasPendientes.delete(paquete.deIdPublico);
                 if (this.onRefresh) this.onRefresh();
             }
             if (paquete.tipo === 'CONNECTION_ACCEPTED') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
-                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                 conn.send({ 
                     tipo: 'HANDSHAKE_START', 
                     miIdPublico: misCreds.idPublico, 
@@ -258,7 +259,7 @@ export const PeerService: IPeerService = {
             if (paquete.tipo === 'HANDSHAKE_START') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
-                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                 await BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencial, false, paquete.publicKey);
                 conn.send({ 
                     tipo: 'HANDSHAKE_FINAL', 
@@ -271,7 +272,7 @@ export const PeerService: IPeerService = {
             if (paquete.tipo === 'HANDSHAKE_FINAL') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
-                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                 await BitChatAuth.guardarContacto(paquete.miIdPublico, paquete.cuartaCredencialAmigo, false, paquete.publicKey);
                 this._establecerCanalSeguro(paquete.miIdPublico, miCuarta, paquete.cuartaCredencialAmigo, conn);
                 this._enviarPendientes(paquete.miIdPublico, conn);
@@ -304,7 +305,7 @@ export const PeerService: IPeerService = {
             if (paquete.tipo === 'SYNC_REQUEST') {
                 const misCreds = await BitChatAuth.obtenerMisCredenciales();
                 if (!misCreds) return;
-                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, Estado.masterPassword);
+                const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                 
                 if (paquete.cuarta === miCuarta) {
                     console.log('SYNC: Password (cuarta) coincide. Preparando datos...');
