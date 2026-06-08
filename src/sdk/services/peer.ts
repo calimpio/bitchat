@@ -411,9 +411,11 @@ export const PeerService: IPeerService = {
                     }
                 }
 
-                const chatMsg = {
+                const chatMsg: any = {
                     msgId: paquete.msgId, chatId: paquete.miIdPublico!, de: paquete.miIdPublico!,
-                    msg: decryptedText, time: paquete.time, status: 'read' as const, secure: true
+                    msg: decryptedText, time: paquete.time, status: 'read' as const, secure: true,
+                    iv: paquete.iv,
+                    ciphertext: paquete.txt // Store original for later retry
                 };
                 await DB.addMessage(chatMsg);
                 conn.send({ tipo: 'MSG_ACK', msgId: paquete.msgId, read: true });
@@ -466,6 +468,22 @@ export const PeerService: IPeerService = {
                     }
 
                     const allMensajes = await DB.getAllMessages();
+                    
+                    // [REPAIR] Try to decrypt encrypted messages before sending if key is now available
+                    for (const m of allMensajes) {
+                        if (m.msg === '[Mensaje Cifrado]' && m.ciphertext && m.iv) {
+                            const sharedKey = await this._getSharedKey(m.chatId);
+                            if (sharedKey) {
+                                try {
+                                    m.msg = await CryptoService.decrypt(sharedKey, m.ciphertext, m.iv);
+                                    console.log(`[DEBUG-SYNC] Reparado mensaje ${m.msgId} antes de enviar.`);
+                                } catch (e) {
+                                    // Keep encrypted if fails
+                                }
+                            }
+                        }
+                    }
+
                     const filteredMensajes = allMensajes.filter(m => allowedChatIds.includes(m.chatId));
 
                     console.log(`[DEBUG-SYNC] Enviando ${Object.keys(filteredContactos).length} contactos y ${filteredMensajes.length} mensajes autorizados.`);
@@ -483,6 +501,22 @@ export const PeerService: IPeerService = {
                     await BitChatAuth.guardarContacto(idPublico, c.tokenCuartaCredencial, c.insecure, c.publicKey, c.syncAllowedDevices);
                     delete this.sharedKeys[idPublico];
                 }
+
+                // [REPAIR] Try to decrypt imported messages if we now have the keys
+                for (const m of paquete.mensajes) {
+                    if (m.msg === '[Mensaje Cifrado]' && m.ciphertext && m.iv) {
+                        const sharedKey = await this._getSharedKey(m.chatId);
+                        if (sharedKey) {
+                            try {
+                                m.msg = await CryptoService.decrypt(sharedKey, m.ciphertext, m.iv);
+                                console.log(`[DEBUG-SYNC] Reparado mensaje ${m.msgId} tras importar.`);
+                            } catch (e) {
+                                // Keep encrypted
+                            }
+                        }
+                    }
+                }
+
                 console.log(`[DEBUG-SYNC] Importando ${paquete.mensajes.length} mensajes a IndexedDB...`);
                 await DB.importMessages(paquete.mensajes);
                 console.log("[DEBUG-SYNC] Sincronización completada con éxito.");

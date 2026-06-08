@@ -9,7 +9,7 @@ export const DB: IDBService = {
 
     init(): Promise<void> {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('bitchat_db', 9);
+            const req = indexedDB.open('bitchat_db', 10);
             req.onupgradeneeded = (e) => {
                 const db = (e.target as IDBOpenDBRequest).result;
                 if (!db.objectStoreNames.contains('messages')) {
@@ -217,7 +217,16 @@ export const DB: IDBService = {
                 const index = store.index('msgId');
                 const checkReq = index.get(msg.msgId);
                 checkReq.onsuccess = () => {
-                    if (checkReq.result) resolve(checkReq.result.id);
+                    if (checkReq.result) {
+                        const existing = checkReq.result;
+                        // Si el mensaje ya existe pero era cifrado y ahora viene descifrado, lo actualizamos
+                        if (existing.msg === '[Mensaje Cifrado]' && msg.msg !== '[Mensaje Cifrado]') {
+                            const updated = { ...existing, ...msg };
+                            store.put(updated).onsuccess = () => resolve(existing.id);
+                        } else {
+                            resolve(existing.id);
+                        }
+                    }
                     else {
                         const addReq = store.add(msg);
                         addReq.onsuccess = (e) => resolve((e.target as IDBRequest).result);
@@ -251,7 +260,9 @@ export const DB: IDBService = {
             delete m.id;
             // Si el mensaje viene descifrado (desde otra instancia de DB), 
             // quitamos el IV para que addMessage lo vuelva a cifrar con la clave local.
-            delete m.iv; 
+            if (m.msg !== '[Mensaje Cifrado]') {
+                delete m.iv; 
+            }
             await this.addMessage(m);
         }
     },

@@ -31,6 +31,7 @@ export interface Message {
     status: 'saved' | 'sent' | 'read';
     secure: boolean;
     iv?: string; // Initialization vector for AES-GCM
+    ciphertext?: string; // Original encrypted payload for retry
 }
 
 export interface RequestRecord {
