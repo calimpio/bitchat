@@ -331,6 +331,7 @@ export const PeerService: IPeerService = {
                 console.log('Sincronización de Identidad Exitosa con dispositivo remoto.');
                 const remoteDeviceId = paquete.deviceId || conn.peer?.replace('bc-v2-', '').split('-')[0];
                 const ownerIdPublico = conn.peer?.replace('bc-v2-', '').split('-')[0]; 
+                
                 if (remoteDeviceId) {
                     await DB.addDevice({
                         deviceId: remoteDeviceId,
@@ -340,6 +341,14 @@ export const PeerService: IPeerService = {
                         lastSeen: Date.now(),
                         peerId: conn.peer
                     });
+
+                    // Prevenir bucles de auto-sync (solo una vez por sesión de conexión)
+                    const syncKey = `sync_session_${remoteDeviceId}`;
+                    if ((window as any)[syncKey]) {
+                        console.log(`[DEBUG-SYNC] Sesión de sync ya activa para ${remoteDeviceId}.`);
+                        return;
+                    }
+                    (window as any)[syncKey] = true;
                     
                     // AUTO-SYNC: If we just matched identity, request a delta/repair sync
                     const misCreds = await BitChatAuth.obtenerMisCredenciales();
@@ -347,9 +356,10 @@ export const PeerService: IPeerService = {
                         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
                         const allMsgs = await DB.getAllMessages();
                         const lastTime = allMsgs.length > 0 ? Math.max(...allMsgs.map(m => m.time)) : 0;
-                        const repairIds = allMsgs.filter(m => m.msg === '[Mensaje Cifrado]' && m.ciphertext && m.iv).map(m => m.msgId);
+                        // Reparamos cualquier mensaje que tenga ciphertext (P2P bloqueado)
+                        const repairIds = allMsgs.filter(m => !!m.ciphertext).map(m => m.msgId);
                         
-                        console.log(`[DEBUG-SYNC] Lanzando AUTO-SYNC con ${remoteDeviceId}...`);
+                        console.log(`[DEBUG-SYNC] Lanzando AUTO-SYNC con ${remoteDeviceId}. Delta > ${new Date(lastTime).toLocaleString()}. Reparando: ${repairIds.length}`);
                         conn.send({ 
                             tipo: 'SYNC_REQUEST', 
                             cuarta: miCuarta, 

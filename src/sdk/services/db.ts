@@ -203,7 +203,10 @@ export const DB: IDBService = {
 
     async addMessage(msg: Message): Promise<number | undefined> {
         const { aesKey } = useStore.getState();
-        if (aesKey && !msg.iv) {
+        
+        // Si el mensaje está legible y tenemos la llave de la bóveda, 
+        // lo ciframos para persistencia local bajo el Master Password.
+        if (aesKey && msg.msg !== '[Mensaje Cifrado]' && !msg.ciphertext) {
             const encrypted = await this.encryptMsg(msg.msg);
             msg.msg = encrypted.ciphertext;
             msg.iv = encrypted.iv;
@@ -219,8 +222,11 @@ export const DB: IDBService = {
                 checkReq.onsuccess = () => {
                     if (checkReq.result) {
                         const existing = checkReq.result;
-                        // Si el mensaje ya existe pero era cifrado y ahora viene descifrado, lo actualizamos
-                        if (existing.msg === '[Mensaje Cifrado]' && msg.msg !== '[Mensaje Cifrado]') {
+                        // REPARACIÓN: Si el mensaje existente era ilegible y el nuevo viene legible, lo actualizamos.
+                        const existingIsEncrypted = existing.msg === '[Mensaje Cifrado]' || !!existing.ciphertext;
+                        const newIsDecrypted = msg.msg !== '[Mensaje Cifrado]' && !msg.ciphertext;
+
+                        if (existingIsEncrypted && newIsDecrypted) {
                             const updated = { ...existing, ...msg };
                             store.put(updated).onsuccess = () => resolve(existing.id);
                         } else {
@@ -249,7 +255,14 @@ export const DB: IDBService = {
         });
 
         for (const m of messages) {
-            if (m.iv) m.msg = await this.decryptMsg(m.msg, m.iv);
+            // Solo desciframos mensajes protegidos por la bóveda local (sin ciphertext de transporte)
+            if (m.iv && !m.ciphertext) {
+                try {
+                    m.msg = await this.decryptMsg(m.msg, m.iv);
+                } catch (e) {
+                    m.msg = '[Mensaje Cifrado]';
+                }
+            }
         }
         return messages;
     },
@@ -258,11 +271,6 @@ export const DB: IDBService = {
         if (!this.db) return;
         for (const m of messages) {
             delete m.id;
-            // Si el mensaje viene descifrado (desde otra instancia de DB), 
-            // quitamos el IV para que addMessage lo vuelva a cifrar con la clave local.
-            if (m.msg !== '[Mensaje Cifrado]') {
-                delete m.iv; 
-            }
             await this.addMessage(m);
         }
     },
