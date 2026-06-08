@@ -65,6 +65,8 @@ export interface IPaqueteBase {
     tipo: TipoPaquete;
     miIdPublico?: string;
     deIdPublico?: string;
+    reqId?: string; // UUID for Request/Response tracking
+    isResponse?: boolean; // Flag to indicate this packet is a response
 }
 export interface IPaqueteIdentityProbe extends IPaqueteBase {
     tipo: 'IDENTITY_PROBE';

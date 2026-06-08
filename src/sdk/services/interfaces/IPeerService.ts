@@ -30,6 +30,9 @@ export interface IPeerService {
     /** Map of active connections to personal devices for replication. */
     deviceConns?: Record<string, DataConnection>;
 
+    /** Map of pending RPC requests waiting for a response. */
+    pendingRequests?: Record<string, { resolve: (data: any) => void, reject: (error: any) => void, timeout: number }>;
+
     /** Persistent ID for this terminal. */
     localDeviceId?: string;
 
@@ -92,4 +95,10 @@ export interface IPeerService {
 
     /** Actively requests a sync for a specific chat from all online personal devices. */
     syncChat(chatId: string): Promise<void>;
+
+    /** Sends a request and waits for a response with a timeout. (RPC Model) */
+    request<T>(conn: DataConnection, tipo: string, payload: any): Promise<T>;
+
+    /** Sends a response to a previous request. (RPC Model) */
+    respond(conn: DataConnection, reqId: string, tipo: string, payload: any): Promise<void>;
 }

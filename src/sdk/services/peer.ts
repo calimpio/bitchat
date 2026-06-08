@@ -1,7 +1,7 @@
 import { Peer, DataConnection } from 'peerjs';
 import { DB } from './db.ts';
 import { BitChatAuth, generarCuartaCredencial, generarQuintaId, hashString } from './auth.ts';
-import { IPaqueteData, ContactMap, Message, Credentials } from '../models/types.ts';
+import { IPaqueteData, IPaqueteSyncData, ContactMap, Message, Credentials } from '../models/types.ts';
 import { CryptoService } from './crypto.ts';
 import { VaultService } from './vault.ts';
 import { IPeerService } from './interfaces/IPeerService.ts';
@@ -15,6 +15,7 @@ export const PeerService: IPeerService = {
     onRefresh: null,
     onMessage: null,
     deviceConns: {},
+    pendingRequests: {},
     localDeviceId: undefined,
     localEnvLabel: undefined,
 
@@ -270,6 +271,18 @@ export const PeerService: IPeerService = {
 
         conn.on('data', async (data: unknown) => {
             const paquete = data as IPaqueteData;
+            
+            // [RPC] Manejo de respuestas
+            if (paquete.reqId && paquete.isResponse) {
+                if (this.pendingRequests && this.pendingRequests[paquete.reqId]) {
+                    const { resolve, timeout } = this.pendingRequests[paquete.reqId];
+                    clearTimeout(timeout);
+                    delete this.pendingRequests[paquete.reqId];
+                    resolve(paquete);
+                    return;
+                }
+            }
+
             const senderId = paquete.tipo === 'CONNECTION_REQ' ? paquete.deIdPublico : conn.peer!.replace('bc-v2-', '').split('-')[0];
             if (await DB.isBlocked(senderId)) { conn.close(); return; }
 
@@ -469,7 +482,12 @@ export const PeerService: IPeerService = {
                     const payload = { contactos: filteredContactos, mensajes: deltaMensajes };
                     console.log(`[SYNC-DEBUG] Cifrando payload de sincronización para dispositivo ${requestingDevice.deviceId}...`);
                     const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, requestingDevice.publicKey || misCreds.publicKey!);
-                    conn.send({ tipo: 'SYNC_DATA', vault });
+                    
+                    if (paquete.reqId) {
+                        await this.respond(conn, paquete.reqId, 'SYNC_DATA', { vault });
+                    } else {
+                        conn.send({ tipo: 'SYNC_DATA', vault });
+                    }
                 } else { 
                     console.warn('[SYNC-DEBUG] Conflicto de cuarta credencial en SYNC_REQUEST.');
                     conn.close(); 
@@ -607,57 +625,53 @@ export const PeerService: IPeerService = {
     async iniciarSincronizacion(password: string): Promise<boolean> {
         const misCreds = await BitChatAuth.obtenerMisCredenciales();
         if (!misCreds) return false;
+        
+        const hashedId = await hashString(misCreds.idPublico);
+        const targetAuthId = `bc-v2-${hashedId.substring(0, 24)}`;
         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, password);
-        const allMsgs = await DB.getAllMessages(), lastTime = allMsgs.length > 0 ? Math.max(...allMsgs.map(m => m.time)) : 0;
+        
+        const allMsgs = await DB.getAllMessages();
+        const lastTime = allMsgs.length > 0 ? Math.max(...allMsgs.map(m => m.time)) : 0;
         const repairMsgIds = allMsgs.filter(m => m.msg === '[Mensaje Cifrado]' && m.iv).map(m => m.msgId);
+
         return new Promise((resolve) => {
-            const probePeer = new Peer(`bc-sync-probe-${crypto.randomUUID().substring(0, 8)}`);
-            let foundAny = false;
+            const probePeer = new Peer(`bc-sync-rpc-${crypto.randomUUID().substring(0, 8)}`);
             probePeer.on('open', () => {
-                hashString(misCreds.idPublico).then(hash => {
-                    const conn = probePeer.connect(`bc-v2-${hash.substring(0, 24)}`);
-                    const timeout = setTimeout(() => { if (!foundAny) { probePeer.destroy(); resolve(false); } }, 8000);
-                    conn.on('open', () => { foundAny = true; conn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds }); });
-                    conn.on('data', async (data: unknown) => {
-                        const paquete = data as IPaqueteData;
-                        if (paquete.tipo === 'SYNC_DATA') {
-                            let contactos: ContactMap = paquete.contactos || {};
-                            let mensajes: Message[] = paquete.mensajes || [];
+                const conn = probePeer.connect(targetAuthId);
+                conn.on('open', async () => {
+                    try {
+                        const response = await this.request<IPaqueteSyncData>(conn, 'SYNC_REQUEST', {
+                            cuarta: miCuarta,
+                            lastMessageTime: lastTime,
+                            repairMsgIds
+                        });
 
-                            if (paquete.vault) {
-                                try {
-                                    const decrypted = await VaultService.decryptFromE2EE<{ contactos: ContactMap, mensajes: Message[] }>(paquete.vault);
-                                    contactos = decrypted.contactos;
-                                    mensajes = decrypted.mensajes;
-                                } catch (e) {
-                                    console.error('[SYNC-PROBE] Error decrypting E2EE payload:', e);
-                                    probePeer.destroy();
-                                    resolve(false);
-                                    return;
-                                }
-                            }
+                        let contactos: ContactMap = response.contactos || {};
+                        let mensajes: Message[] = response.mensajes || [];
 
-                            for (const id in contactos) {
-                                await BitChatAuth.guardarContacto(
-                                    id, 
-                                    contactos[id].tokenCuartaCredencial, 
-                                    contactos[id].insecure, 
-                                    contactos[id].publicKey, 
-                                    contactos[id].syncAllowedDevices,
-                                    contactos[id].sharedSecret
-                                );
-                                delete this.sharedKeys[id];
-                            }
-
-                            const validados = mensajes.filter(m => m.msgId || m.time);
-                            await DB.importMessages(validados);
-
-                            probePeer.destroy();
-                            resolve(true);
-                            if (this.onRefresh) this.onRefresh();
+                        if (response.vault) {
+                            const decrypted = await VaultService.decryptFromE2EE<{ contactos: ContactMap, mensajes: Message[] }>(response.vault);
+                            contactos = decrypted.contactos;
+                            mensajes = decrypted.mensajes;
                         }
-                    });
+
+                        for (const id in contactos) {
+                            await BitChatAuth.guardarContacto(id, contactos[id].tokenCuartaCredencial, contactos[id].insecure, contactos[id].publicKey, contactos[id].syncAllowedDevices, contactos[id].sharedSecret);
+                            delete this.sharedKeys[id];
+                        }
+
+                        await DB.importMessages(mensajes.filter(m => m.msgId || m.time));
+                        
+                        probePeer.destroy();
+                        if (this.onRefresh) this.onRefresh();
+                        resolve(true);
+                    } catch (e) {
+                        console.error('[RPC-SYNC] Error en sincronización RPC:', e);
+                        probePeer.destroy();
+                        resolve(false);
+                    }
                 });
+                conn.on('error', () => { probePeer.destroy(); resolve(false); });
             });
         });
     },
@@ -763,6 +777,46 @@ export const PeerService: IPeerService = {
             directConn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds });
         } else {
             this.conectarAContacto(chatId);
+        }
+    },
+
+    async request<T>(conn: DataConnection, tipo: string, payload: any): Promise<T> {
+        const reqId = crypto.randomUUID();
+        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        
+        return new Promise((resolve, reject) => {
+            if (!conn.open) return reject(new Error('Conexión cerrada'));
+
+            const timeout = setTimeout(() => {
+                if (this.pendingRequests && this.pendingRequests[reqId]) {
+                    delete this.pendingRequests[reqId];
+                    reject(new Error(`Timeout esperando respuesta a ${tipo}`));
+                }
+            }, 15000);
+
+            if (this.pendingRequests) {
+                this.pendingRequests[reqId] = { resolve, reject, timeout };
+            }
+
+            conn.send({
+                tipo,
+                reqId,
+                miIdPublico: misCreds?.idPublico,
+                ...payload
+            });
+        });
+    },
+
+    async respond(conn: DataConnection, reqId: string, tipo: string, payload: any): Promise<void> {
+        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        if (conn.open) {
+            conn.send({
+                tipo,
+                reqId,
+                isResponse: true,
+                miIdPublico: misCreds?.idPublico,
+                ...payload
+            });
         }
     }
 };
