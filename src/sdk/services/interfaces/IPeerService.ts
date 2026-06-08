@@ -101,4 +101,21 @@ export interface IPeerService {
 
     /** Sends a response to a previous request. (RPC Model) */
     respond(conn: DataConnection, reqId: string, tipo: string, payload: any): Promise<void>;
+
+    /** Internal server handlers for incoming requests. (For architecture separation) */
+    _server?: {
+        handleIdentityProbe: (conn: DataConnection, paquete: any) => Promise<void>;
+        handleIdentityMatch: (conn: DataConnection, paquete: any) => Promise<void>;
+        handleSyncRequest: (conn: DataConnection, paquete: any) => Promise<void>;
+        handleIncomingMessage: (conn: DataConnection, paquete: any) => Promise<void>;
+        handleSecurityAlert: (paquete: any) => Promise<void>;
+        handleConnectionReq: (conn: DataConnection, paquete: any) => Promise<void>;
+        handleSyncData: (conn: DataConnection, paquete: any) => Promise<void>;
+    };
+
+    /** Internal router for client-side responses. */
+    _handleClientResponse?: (paquete: any) => void;
+
+    /** Internal router for server-side requests. */
+    _handleServerRequest?: (conn: DataConnection, paquete: any) => Promise<void>;
 }
