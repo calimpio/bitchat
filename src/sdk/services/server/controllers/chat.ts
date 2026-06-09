@@ -43,5 +43,6 @@ export const chatController = {
     async handleMsgAck(ctx: RPCContext) {
         const p = ctx.paquete as any;
         await DB.updateMessageByMsgId(p.msgId, { status: p.read ? 'read' : 'sent' });
+        await ctx.response({ acknowledged: true });
     }
 };

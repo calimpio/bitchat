@@ -15,14 +15,16 @@ export const handshakeController = {
         const p = ctx.paquete as any;
         if (ctx.misCreds?.publicKey && p.huellaDestino === await CryptoService.getFingerprint(ctx.misCreds.publicKey)) { 
             await PeerService.aceptarConexion(p.deIdPublico); 
+            await ctx.response({ accepted: true });
             return; 
         }
         await DB.addRequest({ idPublico: p.deIdPublico, time: Date.now(), publicKey: p.publicKey });
+        await ctx.response({ received: true });
     },
 
     async handleConnectionAccepted(ctx: RPCContext) {
         const miCuarta = await generarCuartaCredencial(ctx.misCreds!.idPublico, ctx.misCreds!.idPrivado, useStore.getState().masterPassword);
-        ctx.conn.send({ tipo: 'HANDSHAKE_START', miIdPublico: ctx.misCreds!.idPublico, cuartaCredencial: miCuarta, publicKey: ctx.misCreds!.publicKey! });
+        await ctx.response({ miIdPublico: ctx.misCreds!.idPublico, cuartaCredencial: miCuarta, publicKey: ctx.misCreds!.publicKey! });
     },
 
     async handleHandshakeStart(ctx: RPCContext) {
@@ -30,7 +32,7 @@ export const handshakeController = {
         const miCuarta = await generarCuartaCredencial(ctx.misCreds!.idPublico, ctx.misCreds!.idPrivado, useStore.getState().masterPassword);
         await BitChatAuth.guardarContacto(p.miIdPublico, p.cuartaCredencial, false, p.publicKey);
         PeerService._replicateContact(p.miIdPublico);
-        ctx.conn.send({ tipo: 'HANDSHAKE_FINAL', miIdPublico: ctx.misCreds!.idPublico, cuartaCredencialAmigo: miCuarta, publicKey: ctx.misCreds!.publicKey! });
+        await ctx.response({ miIdPublico: ctx.misCreds!.idPublico, cuartaCredencialAmigo: miCuarta, publicKey: ctx.misCreds!.publicKey! });
         PeerService._establecerCanalSeguro(p.miIdPublico, miCuarta, p.cuartaCredencial, ctx.conn);
     },
 
@@ -41,10 +43,12 @@ export const handshakeController = {
         PeerService._replicateContact(p.miIdPublico);
         PeerService._establecerCanalSeguro(p.miIdPublico, miCuarta, p.cuartaCredencialAmigo, ctx.conn);
         PeerService._enviarPendientes(p.miIdPublico, ctx.conn);
+        await ctx.response({ secure: true });
     },
 
     async handleConnectionRejected(ctx: RPCContext) {
         const p = ctx.paquete as any;
         useStore.getState().solicitudesEnviadasPendientes.delete(p.deIdPublico);
+        await ctx.response({ acknowledged: true });
     }
 };

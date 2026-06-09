@@ -24,8 +24,7 @@ export const identityController = {
         });
 
         const soyMasAntiguo = !p.createdAt || ctx.misCreds!.createdAt < p.createdAt;
-        ctx.conn.send({ 
-            tipo: 'IDENTITY_MATCH', 
+        await ctx.response({ 
             deviceId: PeerService.localDeviceId, 
             deviceLabel: PeerService.localEnvLabel, 
             publicKey: ctx.misCreds!.publicKey, 
@@ -86,5 +85,7 @@ export const identityController = {
             const repairMsgIds = allMsgs.filter(m => !!m.ciphertext).map(m => m.msgId);
             ctx.conn.send({ tipo: 'SYNC_REQUEST', cuarta: ctx.miCuarta, lastMessageTime: lastTime, repairMsgIds });
         }
+        
+        await ctx.response({ success: true });
     }
 };
