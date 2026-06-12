@@ -56,6 +56,7 @@ export const RPCRouter = {
                 case 'IDENTITY_MATCH': await identityController.match(ctx); break;
                 case 'SYNC_REQUEST': await syncController.handleRequest(ctx); break;
                 case 'SYNC_DATA': await syncController.handleData(ctx); break;
+                case 'GET_MESSAGES': await chatController.handleGetMessages(ctx); break;
                 case 'MSG': await chatController.handleIncomingMessage(ctx); break;
                 case 'MSG_ACK': await chatController.handleMsgAck(ctx); break;
                 case 'SECURITY_ALERT': await handshakeController.handleSecurityAlert(ctx); break;

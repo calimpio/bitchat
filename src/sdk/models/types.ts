@@ -58,6 +58,7 @@ export type TipoPaquete =
     | 'HANDSHAKE_FINAL' 
     | 'MSG' 
     | 'MSG_ACK' 
+    | 'GET_MESSAGES'
     | 'SYNC_REQUEST' 
     | 'SYNC_DATA';
 
@@ -149,6 +150,7 @@ export interface EncryptedVaultObject {
 
 export interface IPaqueteSyncData extends IPaqueteBase {
     tipo: 'SYNC_DATA';
+    cuarta?: string;
     contactos?: ContactMap;
     mensajes?: Message[];
     vault?: EncryptedVaultObject;
@@ -167,6 +169,12 @@ export interface IPaqueteConnectionRejected extends IPaqueteBase {
     deIdPublico: string;
 }
 
+export interface IPaqueteGetMessages extends IPaqueteBase {
+    tipo: 'GET_MESSAGES';
+    chatId: string;
+    lastTime?: number;
+}
+
 export type IPaqueteData = 
     | IPaqueteIdentityProbe 
     | IPaqueteIdentityMatch
@@ -179,6 +187,7 @@ export type IPaqueteData =
     | IPaqueteHandshakeFinal 
     | IPaqueteMsg 
     | IPaqueteMsgAck 
+    | IPaqueteGetMessages
     | IPaqueteSyncRequest 
     | IPaqueteSyncData;
 

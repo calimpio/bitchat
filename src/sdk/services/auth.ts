@@ -17,8 +17,11 @@ export async function hashString(str: string): Promise<string> {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function generarCuartaCredencial(idPublico: string, idPrivado: string, passwordHash: string): Promise<string> {
-    return await hashString(`${idPublico}:${idPrivado}:${passwordHash}`);
+export async function generarCuartaCredencial(idPublico: string, idPrivado: string, masterPassword?: string): Promise<string> {
+    // We combine public identity, private identity and optionally the master password
+    // to create a non-reversible proof of authorization.
+    const salt = masterPassword || 'DEFAULT_V2_SALT';
+    return await hashString(`${idPublico}:${idPrivado}:${salt}`);
 }
 
 export async function generarQuintaId(cuartaA: string, cuartaB: string): Promise<string> {

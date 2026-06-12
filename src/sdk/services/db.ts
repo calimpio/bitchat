@@ -1,4 +1,4 @@
-import { Message, RequestRecord, Credentials } from '../models/types.ts';
+import { Message, RequestRecord, Credentials, Device } from '../models/types.ts';
 import { useStore } from '../../store/useStore.ts';
 import { CryptoService } from './crypto.ts';
 import { IDBService } from './interfaces/IDBService.ts';
@@ -10,7 +10,7 @@ export const DB: IDBService = {
     init(): Promise<void> {
         return new Promise((resolve, reject) => {
             const req = indexedDB.open('bitchat_db', 12);
-            req.onupgradeneeded = (e) => {
+            req.onupgradeneeded = (e: IDBVersionChangeEvent) => {
                 const db = (e.target as IDBOpenDBRequest).result;
                 const tx = (e.target as IDBOpenDBRequest).transaction!;
                 
@@ -43,7 +43,7 @@ export const DB: IDBService = {
                 }
                 db.createObjectStore('devices', { keyPath: 'deviceId' });
             };
-            req.onsuccess = (e) => {
+            req.onsuccess = (e: Event) => {
                 this.db = (e.target as IDBOpenDBRequest).result;
                 resolve();
             };
@@ -51,7 +51,7 @@ export const DB: IDBService = {
         });
     },
 
-    async addDevice(device: any): Promise<void> {
+    async addDevice(device: Device): Promise<void> {
         const now = Date.now();
         if (!device.createdAt) device.createdAt = now;
         device.updatedAt = now;
@@ -65,13 +65,13 @@ export const DB: IDBService = {
         });
     },
 
-    async getDevices(): Promise<any[]> {
+    async getDevices(): Promise<Device[]> {
         return new Promise((resolve) => {
             if (!this.db) return resolve([]);
             const tx = this.db.transaction('devices', 'readonly');
             const store = tx.objectStore('devices');
             const req = store.getAll();
-            req.onsuccess = () => resolve(req.result);
+            req.onsuccess = () => resolve(req.result as Device[]);
         });
     },
 
@@ -99,7 +99,7 @@ export const DB: IDBService = {
             const tx = this.db.transaction('blacklist', 'readonly');
             const store = tx.objectStore('blacklist');
             const req = store.getAll();
-            req.onsuccess = () => resolve(req.result.map((item: any) => item.idPublico));
+            req.onsuccess = () => resolve((req.result as { idPublico: string }[]).map(item => item.idPublico));
         });
     },
 
@@ -160,7 +160,7 @@ export const DB: IDBService = {
             const tx = this.db.transaction('requests', 'readonly');
             const store = tx.objectStore('requests');
             const req = store.getAll();
-            req.onsuccess = () => resolve(req.result);
+            req.onsuccess = () => resolve(req.result as RequestRecord[]);
         });
     },
 
@@ -188,7 +188,7 @@ export const DB: IDBService = {
             const tx = this.db.transaction('credentials', 'readonly');
             const store = tx.objectStore('credentials');
             const req = store.get('me');
-            req.onsuccess = () => resolve(req.result);
+            req.onsuccess = () => resolve(req.result as Credentials);
             req.onerror = () => resolve(null);
         });
     },
@@ -284,7 +284,7 @@ export const DB: IDBService = {
             const tx = this.db.transaction('messages', 'readonly');
             const store = tx.objectStore('messages');
             const req = store.getAll();
-            req.onsuccess = () => resolve(req.result);
+            req.onsuccess = () => resolve(req.result as Message[]);
         });
 
         for (const m of messages) {
@@ -316,7 +316,7 @@ export const DB: IDBService = {
             const getReq = store.get(msgId);
             getReq.onsuccess = async () => {
                 if (!getReq.result) return resolve();
-                const data = { ...getReq.result, ...updates };
+                const data = { ...getReq.result as Message, ...updates };
                 store.put(data).onsuccess = () => resolve();
             };
         });
@@ -329,7 +329,7 @@ export const DB: IDBService = {
             const store = tx.objectStore('messages');
             const index = store.index('chatId');
             const req = index.getAll(chatId);
-            req.onsuccess = () => resolve(req.result.sort((a: Message, b: Message) => a.time - b.time));
+            req.onsuccess = () => resolve((req.result as Message[]).sort((a, b) => a.time - b.time));
         });
 
         for (const m of messages) {
@@ -352,7 +352,7 @@ export const DB: IDBService = {
             const store = tx.objectStore('messages');
             const index = store.index('status');
             const req = index.getAll('saved');
-            req.onsuccess = () => resolve(req.result);
+            req.onsuccess = () => resolve(req.result as Message[]);
         });
 
         for (const m of messages) {
@@ -377,13 +377,13 @@ export const DB: IDBService = {
         });
     },
 
-    async getContacts(): Promise<EncryptedVaultObject[]> {
+    async getContacts(): Promise<(EncryptedVaultObject & { idPublico: string })[]> {
         return new Promise((resolve) => {
             if (!this.db) return resolve([]);
             const tx = this.db.transaction('contacts', 'readonly');
             const store = tx.objectStore('contacts');
             const req = store.getAll();
-            req.onsuccess = () => resolve(req.result);
+            req.onsuccess = () => resolve(req.result as (EncryptedVaultObject & { idPublico: string })[]);
         });
     },
 
@@ -405,7 +405,7 @@ export const DB: IDBService = {
         
         return new Promise((resolve) => {
             req.onsuccess = async (e) => {
-                const cursor = (e.target as IDBRequest).result;
+                const cursor = (e.target as IDBRequest).result as IDBCursorWithValue;
                 if (cursor) {
                     const m = cursor.value as Message;
                     

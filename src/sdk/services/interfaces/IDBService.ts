@@ -1,4 +1,4 @@
-import { Message, RequestRecord, Credentials } from '../../models/types.ts';
+import { Message, RequestRecord, Credentials, Device } from '../../models/types.ts';
 import { EncryptedVaultObject } from '../../models/vault.ts';
 
 /**
@@ -61,7 +61,7 @@ export interface IDBService {
     saveContact(idPublico: string, data: EncryptedVaultObject): Promise<void>;
 
     /** Retrieves all saved contacts. */
-    getContacts(): Promise<EncryptedVaultObject[]>;
+    getContacts(): Promise<(EncryptedVaultObject & { idPublico: string })[]>;
 
     /** Removes a contact from the database. */
     deleteContact(idPublico: string): Promise<void>;
@@ -85,10 +85,10 @@ export interface IDBService {
     migratePlainMessages(): Promise<void>;
 
     /** Adds or updates a known personal device. */
-    addDevice(device: any): Promise<void>;
+    addDevice(device: Device): Promise<void>;
 
     /** Retrieves all known personal devices. */
-    getDevices(): Promise<any[]>;
+    getDevices(): Promise<Device[]>;
 
     /** Deletes a device from the known devices list. */
     deleteDevice(deviceId: string): Promise<void>;

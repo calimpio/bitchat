@@ -4,12 +4,13 @@ import { BitChatAuth } from '../../auth.ts';
 import { PeerService } from '../../peer.ts';
 import { VaultService } from '../../vault.ts';
 import { CryptoService } from '../../crypto.ts';
-import { ContactMap, Message } from '../../../models/types.ts';
+import { ContactMap, Message, IPaqueteSyncRequest, IPaqueteSyncData } from '../../../models/types.ts';
+import { validateFields } from '../core/validation.ts';
 
 export const syncController = {
     async handleRequest(ctx: RPCContext) {
         console.log(`[RPC-SERVER] Procesando SYNC_REQUEST de ${ctx.conn.peer}`);
-        const p = ctx.paquete as any;
+        const p = validateFields<IPaqueteSyncRequest>(ctx.paquete, [], ['lastMessageTime', 'repairMsgIds']);
         
         const allDevices = await DB.getDevices();
         const requestingDevice = allDevices.find(d => d.peerId === ctx.conn.peer);
@@ -56,7 +57,7 @@ export const syncController = {
 
     async handleData(ctx: RPCContext) {
         console.log(`[RPC-SERVER] Procesando SYNC_DATA (Importación) de ${ctx.conn.peer}`);
-        const p = ctx.paquete as any;
+        const p = validateFields<IPaqueteSyncData>(ctx.paquete, [], ['contactos', 'mensajes', 'vault']);
         let contactos: ContactMap = p.contactos || {};
         let mensajes: Message[] = p.mensajes || [];
 

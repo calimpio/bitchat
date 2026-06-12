@@ -10,6 +10,20 @@ if (!rootElement) throw new Error('Failed to find the root element');
 
 const root = createRoot(rootElement);
 
+// Security: Reset lock timer on any user activity
+document.addEventListener('mousedown', () => useStore.getState().resetLockTimer());
+document.addEventListener('keydown', () => useStore.getState().resetLockTimer());
+
+// Security: Auto-lock terminal after inactivity or background (using the store timer)
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+        useStore.getState().resetLockTimer();
+    } else {
+        // Al ocultarse, nos aseguramos que el timer esté corriendo
+        useStore.getState().resetLockTimer();
+    }
+});
+
 DB.init().then(async () => {
     const creds = await BitChatAuth.obtenerMisCredenciales();
     if (creds) {

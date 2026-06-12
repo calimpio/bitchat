@@ -2,6 +2,8 @@ import { BitChatAuth, generarCuartaCredencial } from '../../auth.ts';
 import { useStore } from '../../../../store/useStore.ts';
 import { RPCContext } from '../models/rpcContext.ts';
 import { RPCError } from '../errors/RPCError.ts';
+import { validateFields } from '../core/validation.ts';
+import { IPaqueteIdentityProbe, IPaqueteSyncRequest, IPaqueteSyncData } from '../../../models/types.ts';
 
 export const authMiddleware = async (ctx: RPCContext): Promise<void> => {
     const misCreds = await BitChatAuth.obtenerMisCredenciales();
@@ -13,13 +15,18 @@ export const authMiddleware = async (ctx: RPCContext): Promise<void> => {
     ctx.miIdPublico = misCreds.idPublico;
     
     // Algunos paquetes requieren validación de cuarta credencial
-    const requireCuarta = ['SYNC_REQUEST', 'IDENTITY_PROBE', 'SYNC_DATA'];
-    if (requireCuarta.includes(ctx.paquete.tipo)) {
+    if (ctx.paquete.tipo === 'SYNC_REQUEST' || ctx.paquete.tipo === 'IDENTITY_PROBE' || ctx.paquete.tipo === 'SYNC_DATA') {
         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
         ctx.miCuarta = miCuarta;
+
+        // Validamos que el paquete traiga la cuarta credencial (es opcional en SYNC_DATA según el tipo pero aquí la validamos si existe)
+        const p = validateFields<IPaqueteIdentityProbe | IPaqueteSyncRequest | IPaqueteSyncData>(
+            ctx.paquete, 
+            ctx.paquete.tipo === 'SYNC_DATA' ? [] : ['cuarta'], 
+            ctx.paquete.tipo === 'SYNC_DATA' ? ['cuarta'] : []
+        );
         
-        const paqueteCualquier = ctx.paquete as any;
-        if (paqueteCualquier.cuarta && paqueteCualquier.cuarta !== miCuarta) {
+        if (p.cuarta && p.cuarta !== miCuarta) {
             throw new RPCError('UNAUTHORIZED', 'Cuarta credencial inválida.', true);
         }
     }

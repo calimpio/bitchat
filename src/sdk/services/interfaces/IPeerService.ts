@@ -94,7 +94,7 @@ export interface IPeerService {
     _replicateContact(idPublico: string): Promise<void>;
 
     /** Actively requests a sync for a specific chat from all online personal devices. */
-    syncChat(chatId: string): Promise<void>;
+    syncChat(chatId: string): Promise<void>;   
 
     /** Sends a request and waits for a response with a timeout. (RPC Model) */
     request<T>(conn: DataConnection, tipo: string, payload: any): Promise<T>;
@@ -124,3 +124,5 @@ export interface IPeerService {
     /** Internal router for server-side requests. */
     _handleServerRequest?: (conn: DataConnection, paquete: any) => Promise<void>;
 }
+
+

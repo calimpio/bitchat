@@ -33,3 +33,4 @@ windows/www/
 *.exe
 *.msi
 *.msix
+.gemini

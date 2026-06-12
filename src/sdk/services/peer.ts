@@ -103,10 +103,10 @@ export const PeerService: IPeerService = {
                 conn.on('open', async () => {
                     foundExisting = true; clearTimeout(timeout);
                     const localCreds = await BitChatAuth.obtenerMisCredenciales();
-                    conn.send({ 
-                        tipo: 'IDENTITY_PROBE', 
-                        deIdPublico: idPublico, 
-                        cuarta: miCuarta, 
+                    conn.send({
+                        tipo: 'IDENTITY_PROBE',
+                        deIdPublico: idPublico,
+                        cuarta: miCuarta,
                         nonce: crypto.randomUUID(),
                         createdAt: localCreds?.createdAt
                     });
@@ -131,9 +131,9 @@ export const PeerService: IPeerService = {
             for (const target of uniqueTargets) { this.conectarAContacto(target); }
             for (const target of Array.from(useStore.getState().solicitudesEnviadasPendientes)) { this.conectarAContacto(target); }
         }, 60000) as unknown as number;
-    },
+    },   
 
-    async conectarADispositivoPersonal(targetId: string): Promise<void> {
+    async conectarADispositivoPersonal(targetId: string, conection?: (conn: DataConnection) => void): Promise<void> {
         if (!this.peer || !this.peer.open || !targetId || targetId === this.peer.id) return;
         console.log(`Intentando conectar a dispositivo personal: ${targetId}`);
         const conn = this.peer.connect(targetId, { reliable: true });
@@ -152,6 +152,7 @@ export const PeerService: IPeerService = {
                 createdAt: misCreds.createdAt
             });
         });
+
         this._procesarEntrante(conn);
     },
 
@@ -171,6 +172,8 @@ export const PeerService: IPeerService = {
             }
         }
     },
+
+
 
     async conectarAContacto(idPublicoAmigo: string, huellaEsperada?: string): Promise<void> {
         if (!this.peer || !this.peer.open) return;
@@ -449,6 +452,8 @@ export const PeerService: IPeerService = {
         if (directConn?.open) { directConn.send({ tipo: 'SYNC_REQUEST', cuarta: miCuarta, lastMessageTime: lastTime, repairMsgIds }); }
         else { this.conectarAContacto(chatId); }
     },
+
+
 
     async request<T>(conn: DataConnection, tipo: string, payload: any): Promise<T> {
         const reqId = crypto.randomUUID(), misCreds = await BitChatAuth.obtenerMisCredenciales();

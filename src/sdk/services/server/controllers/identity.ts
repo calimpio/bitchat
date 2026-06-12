@@ -3,11 +3,13 @@ import { DB } from '../../db.ts';
 import { PeerService } from '../../peer.ts';
 import { CryptoService } from '../../crypto.ts';
 import { useStore } from '../../../../store/useStore.ts';
+import { validateFields } from '../core/validation.ts';
+import { IPaqueteIdentityProbe, IPaqueteIdentityMatch } from '../../../models/types.ts';
 
 export const identityController = {
     async probe(ctx: RPCContext) {
         console.log(`[RPC-SERVER] Procesando IDENTITY_PROBE de ${ctx.conn.peer}`);
-        const p = ctx.paquete as any;
+        const p = validateFields<IPaqueteIdentityProbe>(ctx.paquete, ['deIdPublico', 'publicKey'], ['deviceId', 'deviceLabel', 'createdAt']);
         
         const remoteDeviceId = p.deviceId || ctx.conn.peer!.replace('bc-v2-', '').split('-')[0];
         if (PeerService.deviceConns) PeerService.deviceConns[remoteDeviceId] = ctx.conn;
@@ -44,7 +46,7 @@ export const identityController = {
 
     async match(ctx: RPCContext) {
         console.log(`[RPC-SERVER] Procesando IDENTITY_MATCH de ${ctx.conn.peer}`);
-        const p = ctx.paquete as any;
+        const p = validateFields<IPaqueteIdentityMatch>(ctx.paquete, ['publicKey'], ['deviceId', 'deviceLabel', 'creds', 'createdAt']);
         const remoteDeviceId = p.deviceId || ctx.conn.peer?.replace('bc-v2-', '').split('-')[0];
         if (!remoteDeviceId) return;
         

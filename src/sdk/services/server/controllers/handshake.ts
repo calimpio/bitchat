@@ -4,15 +4,23 @@ import { BitChatAuth, generarCuartaCredencial } from '../../auth.ts';
 import { PeerService } from '../../peer.ts';
 import { CryptoService } from '../../crypto.ts';
 import { useStore } from '../../../../store/useStore.ts';
+import { validateFields } from '../core/validation.ts';
+import { 
+    IPaqueteSecurityAlert, 
+    IPaqueteConnectionReq, 
+    IPaqueteHandshakeStart, 
+    IPaqueteHandshakeFinal, 
+    IPaqueteConnectionRejected 
+} from '../../../models/types.ts';
 
 export const handshakeController = {
     async handleSecurityAlert(ctx: RPCContext) {
-        const p = ctx.paquete as any;
+        const p = validateFields<IPaqueteSecurityAlert>(ctx.paquete, ['idComprometido']);
         await BitChatAuth.marcarContactoInseguro(p.idComprometido);
     },
 
     async handleConnectionReq(ctx: RPCContext) {
-        const p = ctx.paquete as any;
+        const p = validateFields<IPaqueteConnectionReq>(ctx.paquete, ['deIdPublico', 'publicKey'], ['huellaDestino']);
         if (ctx.misCreds?.publicKey && p.huellaDestino === await CryptoService.getFingerprint(ctx.misCreds.publicKey)) { 
             await PeerService.aceptarConexion(p.deIdPublico); 
             await ctx.response({ accepted: true });
@@ -28,7 +36,7 @@ export const handshakeController = {
     },
 
     async handleHandshakeStart(ctx: RPCContext) {
-        const p = ctx.paquete as any;
+        const p = validateFields<IPaqueteHandshakeStart>(ctx.paquete, ['miIdPublico', 'cuartaCredencial', 'publicKey']);
         const miCuarta = await generarCuartaCredencial(ctx.misCreds!.idPublico, ctx.misCreds!.idPrivado, useStore.getState().masterPassword);
         await BitChatAuth.guardarContacto(p.miIdPublico, p.cuartaCredencial, false, p.publicKey);
         PeerService._replicateContact(p.miIdPublico);
@@ -37,7 +45,7 @@ export const handshakeController = {
     },
 
     async handleHandshakeFinal(ctx: RPCContext) {
-        const p = ctx.paquete as any;
+        const p = validateFields<IPaqueteHandshakeFinal>(ctx.paquete, ['miIdPublico', 'cuartaCredencialAmigo', 'publicKey']);
         const miCuarta = await generarCuartaCredencial(ctx.misCreds!.idPublico, ctx.misCreds!.idPrivado, useStore.getState().masterPassword);
         await BitChatAuth.guardarContacto(p.miIdPublico, p.cuartaCredencialAmigo, false, p.publicKey);
         PeerService._replicateContact(p.miIdPublico);
@@ -47,7 +55,7 @@ export const handshakeController = {
     },
 
     async handleConnectionRejected(ctx: RPCContext) {
-        const p = ctx.paquete as any;
+        const p = validateFields<IPaqueteConnectionRejected>(ctx.paquete, ['deIdPublico']);
         useStore.getState().solicitudesEnviadasPendientes.delete(p.deIdPublico);
         await ctx.response({ acknowledged: true });
     }
