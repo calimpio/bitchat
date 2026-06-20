@@ -1,4 +1,5 @@
 import { Message, RequestRecord, Credentials, Device } from '../models/types.ts';
+import { Repository, Branch, DriveObject } from '../models/drive.ts';
 import { useStore } from '../../store/useStore.ts';
 import { CryptoService } from './crypto.ts';
 import { IDBService } from './interfaces/IDBService.ts';
@@ -9,7 +10,7 @@ export const DB: IDBService = {
 
     init(): Promise<void> {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('bitchat_db', 12);
+            const req = indexedDB.open('bitchat_db', 13);
             req.onupgradeneeded = (e: IDBVersionChangeEvent) => {
                 const db = (e.target as IDBOpenDBRequest).result;
                 const tx = (e.target as IDBOpenDBRequest).transaction!;
@@ -42,6 +43,17 @@ export const DB: IDBService = {
                     db.deleteObjectStore('devices');
                 }
                 db.createObjectStore('devices', { keyPath: 'deviceId' });
+
+                // bitDrive Object Stores
+                if (!db.objectStoreNames.contains('drive_repositories')) {
+                    db.createObjectStore('drive_repositories', { keyPath: 'repoId' });
+                }
+                if (!db.objectStoreNames.contains('drive_branches')) {
+                    db.createObjectStore('drive_branches', { keyPath: 'branchId' });
+                }
+                if (!db.objectStoreNames.contains('drive_objects')) {
+                    db.createObjectStore('drive_objects', { keyPath: 'hash' });
+                }
             };
             req.onsuccess = (e: Event) => {
                 this.db = (e.target as IDBOpenDBRequest).result;
@@ -425,6 +437,92 @@ export const DB: IDBService = {
                     resolve();
                 }
             };
+        });
+    },
+
+    // =========================================================================
+    // bitDrive Database Implementations
+    // =========================================================================
+    async saveRepository(repo: Repository): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('drive_repositories', 'readwrite');
+            const store = tx.objectStore('drive_repositories');
+            store.put(repo).onsuccess = () => resolve();
+        });
+    },
+
+    async getRepository(repoId: string): Promise<Repository | null> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve(null);
+            const tx = this.db.transaction('drive_repositories', 'readonly');
+            const store = tx.objectStore('drive_repositories');
+            const req = store.get(repoId);
+            req.onsuccess = () => resolve((req.result as Repository) || null);
+            req.onerror = () => resolve(null);
+        });
+    },
+
+    async getRepositories(): Promise<Repository[]> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve([]);
+            const tx = this.db.transaction('drive_repositories', 'readonly');
+            const store = tx.objectStore('drive_repositories');
+            const req = store.getAll();
+            req.onsuccess = () => resolve((req.result as Repository[]) || []);
+        });
+    },
+
+    async saveBranch(branch: Branch): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('drive_branches', 'readwrite');
+            const store = tx.objectStore('drive_branches');
+            store.put(branch).onsuccess = () => resolve();
+        });
+    },
+
+    async getBranch(repoId: string, name: string): Promise<Branch | null> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve(null);
+            const tx = this.db.transaction('drive_branches', 'readonly');
+            const store = tx.objectStore('drive_branches');
+            const req = store.get(`${repoId}:${name}`);
+            req.onsuccess = () => resolve((req.result as Branch) || null);
+            req.onerror = () => resolve(null);
+        });
+    },
+
+    async getBranches(repoId: string): Promise<Branch[]> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve([]);
+            const tx = this.db.transaction('drive_branches', 'readonly');
+            const store = tx.objectStore('drive_branches');
+            const req = store.getAll();
+            req.onsuccess = () => {
+                const all = (req.result as Branch[]) || [];
+                resolve(all.filter(b => b.repoId === repoId));
+            };
+        });
+    },
+
+    async saveDriveObject(obj: DriveObject): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('drive_objects', 'readwrite');
+            const store = tx.objectStore('drive_objects');
+            store.put(obj).onsuccess = () => resolve();
+        });
+    },
+
+    async getDriveObject(hash: string): Promise<DriveObject | null> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve(null);
+            const tx = this.db.transaction('drive_objects', 'readonly');
+            const store = tx.objectStore('drive_objects');
+            const req = store.get(hash);
+            req.onsuccess = () => resolve((req.result as DriveObject) || null);
+            req.onerror = () => resolve(null);
         });
     }
 };

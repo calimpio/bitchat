@@ -6,6 +6,7 @@ import { ChatView } from '../components/views/ChatView.tsx';
 import { SettingsView } from '../components/views/SettingsView.tsx';
 import { DevicesView } from '../components/views/DevicesView.tsx';
 import { ChatSettingsView } from '../components/views/ChatSettingsView.tsx';
+import { DriveView } from '../components/views/DriveView.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { Input } from '../components/ui/Input.tsx';
 import { Button } from '../components/ui/Button.tsx';
@@ -14,6 +15,28 @@ import { PeerService, DB, BitChatAuth } from '../sdk/index.ts';
 export const DashboardPage: React.FC = () => {
     const { activeApp, showSidebar, setShowSidebar, showModalAdd, showModalConfig, chatConIdPublico, setChatConIdPublico, setMostrarChatMobile } = useStore();
     const [addId, setAddId] = useState('');
+
+    React.useEffect(() => {
+        const handleActivity = () => {
+            useStore.getState().resetLockTimer();
+        };
+
+        window.addEventListener('mousemove', handleActivity);
+        window.addEventListener('keydown', handleActivity);
+        window.addEventListener('mousedown', handleActivity);
+        window.addEventListener('touchstart', handleActivity);
+        window.addEventListener('scroll', handleActivity);
+
+        handleActivity();
+
+        return () => {
+            window.removeEventListener('mousemove', handleActivity);
+            window.removeEventListener('keydown', handleActivity);
+            window.removeEventListener('mousedown', handleActivity);
+            window.removeEventListener('touchstart', handleActivity);
+            window.removeEventListener('scroll', handleActivity);
+        };
+    }, []);
     const [addFingerprint, setAddFingerprint] = useState('');
 
     const handleAddNode = () => {
@@ -88,7 +111,8 @@ export const DashboardPage: React.FC = () => {
                     {activeApp === 'Settings' && <SettingsView />}
                     {activeApp === 'bitDevices' && <DevicesView />}
                     {activeApp === 'ChatSettings' && <ChatSettingsView />}
-                    {activeApp !== 'bitChat' && activeApp !== 'Settings' && activeApp !== 'bitDevices' && activeApp !== 'ChatSettings' && (
+                    {activeApp === 'bitDrive' && <DriveView />}
+                    {activeApp !== 'bitChat' && activeApp !== 'Settings' && activeApp !== 'bitDevices' && activeApp !== 'ChatSettings' && activeApp !== 'bitDrive' && (
                         <div style={{ textAlign: 'center', marginTop: '50px', color: 'var(--text-dim)' }}>Próximamente...</div>
                     )}
                 </div>

@@ -33,7 +33,12 @@ export const Sidebar: React.FC = () => {
                 >
                     📱 bitDevices
                 </div>
-                <div className="nav-item" style={{ opacity: 0.4 }}>📂 bitDrive (Prox)</div>
+                <div 
+                    className={`nav-item ${activeApp === 'bitDrive' ? 'active' : ''}`} 
+                    onClick={() => setActiveApp('bitDrive')}
+                >
+                    📂 bitDrive
+                </div>
             </div>
             <div className="sidebar-footer">
                 <div 

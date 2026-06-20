@@ -15,14 +15,25 @@ interface AppStore extends AppStoreState {
     setDevices: (devices: AppState['devices']) => void;
     lockTerminal: () => void;
     resetLockTimer: () => void;
+    
+    // New Session Security Actions
+    setSessionSecurityMode: (mode: 'always_active' | 'absolute_timeout' | 'inactivity_timeout') => void;
+    setSessionTimeoutDuration: (duration: number) => void;
+    startAbsoluteLockTimer: () => void;
+    clearAbsoluteLockTimer: () => void;
 }
 
 interface AppStoreState extends AppState {
     sessionExpiresAt: number | null;
+    sessionSecurityMode: 'always_active' | 'absolute_timeout' | 'inactivity_timeout';
+    sessionTimeoutDuration: number; // in minutes
 }
 
 let lockTimer: number | null = null;
-const LOCK_TIMEOUT = 5 * 60 * 1000; // 5 minutos de inactividad
+let absoluteLockTimer: number | null = null;
+
+const savedMode = (localStorage.getItem('bit_session_security_mode') as any) || 'inactivity_timeout';
+const savedDuration = parseInt(localStorage.getItem('bit_session_timeout_duration') || '5', 10);
 
 export const useStore = create<AppStore>((set, get) => ({
     pantalla: 'AUTH',
@@ -41,6 +52,8 @@ export const useStore = create<AppStore>((set, get) => ({
     aesKey: null,
     devices: [],
     sessionExpiresAt: null,
+    sessionSecurityMode: savedMode,
+    sessionTimeoutDuration: savedDuration,
 
     setPantalla: (pantalla) => {
         set({ pantalla });
@@ -51,8 +64,13 @@ export const useStore = create<AppStore>((set, get) => ({
     setMasterPassword: (pass) => set({ masterPassword: pass }),
     setAesKey: (aesKey) => {
         set({ aesKey });
-        if (aesKey) get().resetLockTimer();
-        else set({ sessionExpiresAt: null });
+        if (aesKey) {
+            get().resetLockTimer();
+            get().startAbsoluteLockTimer();
+        } else {
+            set({ sessionExpiresAt: null });
+            get().clearAbsoluteLockTimer();
+        }
     },
     setChatConIdPublico: (chatConIdPublico) => {
         set({ chatConIdPublico });
@@ -73,6 +91,10 @@ export const useStore = create<AppStore>((set, get) => ({
             clearTimeout(lockTimer);
             lockTimer = null;
         }
+        if (absoluteLockTimer) {
+            clearTimeout(absoluteLockTimer);
+            absoluteLockTimer = null;
+        }
         set({ 
             aesKey: null, 
             masterPassword: '', 
@@ -91,11 +113,73 @@ export const useStore = create<AppStore>((set, get) => ({
             return;
         }
 
-        const expiresAt = Date.now() + LOCK_TIMEOUT;
+        if (get().sessionSecurityMode !== 'inactivity_timeout') {
+            return;
+        }
+
+        const timeoutMs = get().sessionTimeoutDuration * 60 * 1000;
+        const expiresAt = Date.now() + timeoutMs;
         set({ sessionExpiresAt: expiresAt });
 
         lockTimer = window.setTimeout(() => {
             get().lockTerminal();
-        }, LOCK_TIMEOUT);
+        }, timeoutMs);
+    },
+
+    startAbsoluteLockTimer: () => {
+        if (absoluteLockTimer) clearTimeout(absoluteLockTimer);
+
+        if (get().pantalla === 'AUTH' || get().pantalla === 'AUTH_LOGIN' || !get().aesKey) {
+            return;
+        }
+
+        if (get().sessionSecurityMode !== 'absolute_timeout') {
+            return;
+        }
+
+        const timeoutMs = get().sessionTimeoutDuration * 60 * 1000;
+        const expiresAt = Date.now() + timeoutMs;
+        set({ sessionExpiresAt: expiresAt });
+
+        absoluteLockTimer = window.setTimeout(() => {
+            get().lockTerminal();
+        }, timeoutMs);
+    },
+
+    clearAbsoluteLockTimer: () => {
+        if (absoluteLockTimer) {
+            clearTimeout(absoluteLockTimer);
+            absoluteLockTimer = null;
+        }
+    },
+
+    setSessionSecurityMode: (mode) => {
+        localStorage.setItem('bit_session_security_mode', mode);
+        set({ sessionSecurityMode: mode });
+        
+        if (lockTimer) { clearTimeout(lockTimer); lockTimer = null; }
+        if (absoluteLockTimer) { clearTimeout(absoluteLockTimer); absoluteLockTimer = null; }
+        set({ sessionExpiresAt: null });
+
+        if (mode === 'inactivity_timeout') {
+            get().resetLockTimer();
+        } else if (mode === 'absolute_timeout') {
+            get().startAbsoluteLockTimer();
+        }
+    },
+
+    setSessionTimeoutDuration: (duration) => {
+        localStorage.setItem('bit_session_timeout_duration', duration.toString());
+        set({ sessionTimeoutDuration: duration });
+        
+        if (lockTimer) { clearTimeout(lockTimer); lockTimer = null; }
+        if (absoluteLockTimer) { clearTimeout(absoluteLockTimer); absoluteLockTimer = null; }
+        set({ sessionExpiresAt: null });
+
+        if (get().sessionSecurityMode === 'inactivity_timeout') {
+            get().resetLockTimer();
+        } else if (get().sessionSecurityMode === 'absolute_timeout') {
+            get().startAbsoluteLockTimer();
+        }
     }
 }));

@@ -1,5 +1,6 @@
 import { Message, RequestRecord, Credentials, Device } from '../../models/types.ts';
 import { EncryptedVaultObject } from '../../models/vault.ts';
+import { Repository, Branch, DriveObject } from '../../models/drive.ts';
 
 /**
  * IDBService handles local persistence using IndexedDB.
@@ -95,4 +96,16 @@ export interface IDBService {
 
     /** Removes messages that lack both msgId and timestamp. */
     cleanInvalidMessages(): Promise<void>;
+
+    // =========================================================================
+    // bitDrive Database Methods
+    // =========================================================================
+    saveRepository(repo: Repository): Promise<void>;
+    getRepository(repoId: string): Promise<Repository | null>;
+    getRepositories(): Promise<Repository[]>;
+    saveBranch(branch: Branch): Promise<void>;
+    getBranch(repoId: string, name: string): Promise<Branch | null>;
+    getBranches(repoId: string): Promise<Branch[]>;
+    saveDriveObject(obj: DriveObject): Promise<void>;
+    getDriveObject(hash: string): Promise<DriveObject | null>;
 }
