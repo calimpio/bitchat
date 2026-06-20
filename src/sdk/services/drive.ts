@@ -267,5 +267,17 @@ export const DriveService: IDriveService = {
 
         await traverseTree(commit.rootTree, '');
         return files;
+    },
+
+    async deleteRepository(repoId: string): Promise<void> {
+        await DB.deleteRepository(repoId);
+    },
+
+    async renameRepository(repoId: string, newName: string): Promise<void> {
+        const repo = await DB.getRepository(repoId);
+        if (!repo) throw new Error(`Repository ${repoId} not found.`);
+        repo.name = newName;
+        repo.updatedAt = Date.now();
+        await DB.saveRepository(repo);
     }
 };

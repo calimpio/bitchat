@@ -473,6 +473,22 @@ export const DB: IDBService = {
         });
     },
 
+    async deleteRepository(repoId: string): Promise<void> {
+        return new Promise(async (resolve) => {
+            if (!this.db) return resolve();
+            const branches = await this.getBranches(repoId);
+            const tx = this.db.transaction(['drive_repositories', 'drive_branches'], 'readwrite');
+            const repoStore = tx.objectStore('drive_repositories');
+            const branchStore = tx.objectStore('drive_branches');
+            repoStore.delete(repoId);
+            for (const b of branches) {
+                branchStore.delete(b.branchId);
+            }
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+        });
+    },
+
     async saveBranch(branch: Branch): Promise<void> {
         return new Promise((resolve) => {
             if (!this.db) return resolve();

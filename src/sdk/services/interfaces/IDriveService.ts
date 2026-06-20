@@ -24,4 +24,10 @@ export interface IDriveService {
 
     /** Recovers the files and their content at the HEAD of the given branch. */
     checkoutBranch(repoId: string, branchName: string): Promise<{ path: string, content: string }[]>;
+
+    /** Deletes a repository and all its branches. */
+    deleteRepository(repoId: string): Promise<void>;
+
+    /** Renames a repository. */
+    renameRepository(repoId: string, newName: string): Promise<void>;
 }

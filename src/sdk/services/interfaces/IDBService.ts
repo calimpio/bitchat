@@ -103,6 +103,7 @@ export interface IDBService {
     saveRepository(repo: Repository): Promise<void>;
     getRepository(repoId: string): Promise<Repository | null>;
     getRepositories(): Promise<Repository[]>;
+    deleteRepository(repoId: string): Promise<void>;
     saveBranch(branch: Branch): Promise<void>;
     getBranch(repoId: string, name: string): Promise<Branch | null>;
     getBranches(repoId: string): Promise<Branch[]>;

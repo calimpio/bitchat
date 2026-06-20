@@ -27,7 +27,7 @@ export const DriveView: React.FC = () => {
     
     // Commit Message State
     const [commitMessage, setCommitMessage] = useState('');
-    const [activeTab, setActiveTab] = useState<'editor' | 'history'>('editor');
+    const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'settings'>('editor');
 
     // Modals
     const [showCreateRepo, setShowCreateRepo] = useState(false);
@@ -39,6 +39,9 @@ export const DriveView: React.FC = () => {
     const [showRenameModal, setShowRenameModal] = useState(false);
     const [fileToRename, setFileToRename] = useState<string | null>(null);
     const [renameValue, setRenameValue] = useState('');
+
+    // Repository settings/rename state
+    const [repoRenameValue, setRepoRenameValue] = useState('');
 
     const loadRepositories = async () => {
         const list = await DriveService.listRepositories();
@@ -86,6 +89,7 @@ export const DriveView: React.FC = () => {
     useEffect(() => {
         if (activeRepo) {
             loadRepoData(activeRepo, activeBranch);
+            setRepoRenameValue(activeRepo.name);
         }
     }, [activeRepo, activeBranch]);
 
@@ -196,6 +200,48 @@ export const DriveView: React.FC = () => {
             setFileToRename(null);
             setRenameValue('');
             alert("Archivo renombrado con éxito.");
+        }
+    };
+
+    const handleRenameRepo = async () => {
+        if (!activeRepo) return;
+        const newName = repoRenameValue.trim();
+        if (!newName) return alert("El nombre del repositorio no puede estar vacío");
+        try {
+            await DriveService.renameRepository(activeRepo.repoId, newName);
+            setActiveRepo({ ...activeRepo, name: newName });
+            await loadRepositories();
+            alert("Repositorio renombrado con éxito.");
+        } catch (e: any) {
+            alert(e.message || "Error al renombrar el repositorio");
+        }
+    };
+
+    const handleDiscardLocalChanges = () => {
+        if (!activeRepo) return;
+        if (confirm("¿Estás seguro de que deseas descartar todos los cambios locales no confirmados? Esta acción es irreversible.")) {
+            setWorkingFiles(JSON.parse(JSON.stringify(committedFiles)));
+            setSelectedFilePath(null);
+            setEditorPath('');
+            setEditorContent('');
+            alert("Se han descartado los cambios locales.");
+        }
+    };
+
+    const handleDeleteRepo = async () => {
+        if (!activeRepo) return;
+        const confirm1 = confirm("¿Estás seguro de que deseas eliminar este repositorio y todas sus ramas de forma permanente?");
+        if (!confirm1) return;
+        const confirm2 = confirm("Esta acción borrará permanentemente todos tus archivos y el historial de commits. ¿Estás absolutamente seguro?");
+        if (!confirm2) return;
+
+        try {
+            await DriveService.deleteRepository(activeRepo.repoId);
+            setActiveRepo(null);
+            await loadRepositories();
+            alert("Repositorio eliminado con éxito.");
+        } catch (e: any) {
+            alert(e.message || "Error al eliminar el repositorio");
         }
     };
 
@@ -534,12 +580,18 @@ export const DriveView: React.FC = () => {
                         >
                             📜 Historial de Commits
                         </span>
+                        <span 
+                            onClick={() => setActiveTab('settings')}
+                            style={{ fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', color: activeTab === 'settings' ? 'var(--accent-blue)' : 'var(--text-dim)', borderBottom: activeTab === 'settings' ? '2px solid var(--accent-blue)' : '2px solid transparent', paddingBottom: '6px' }}
+                        >
+                            ⚙️ Configuración
+                        </span>
                     </div>
 
                     {/* Tab contents */}
                     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                         
-                        {activeTab === 'editor' ? (
+                        {activeTab === 'editor' && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
                                 {selectedFilePath || isCreatingNewFile ? (
                                     <>
@@ -620,7 +672,9 @@ export const DriveView: React.FC = () => {
                                     </div>
                                 )}
                             </div>
-                        ) : (
+                        )}
+
+                        {activeTab === 'history' && (
                             <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '12px' }}>
                                 {commits.map((commit, idx) => (
                                     <div 
@@ -695,6 +749,78 @@ export const DriveView: React.FC = () => {
                                         Sin commits.
                                     </p>
                                 )}
+                            </div>
+                        )}
+
+                        {activeTab === 'settings' && (
+                            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px', paddingRight: '4px' }}>
+                                {/* Info Card */}
+                                <Card style={{ padding: '20px', background: 'rgba(255,255,255,0.01)' }}>
+                                    <h4 style={{ margin: '0 0 12px 0', color: 'var(--accent-blue)' }}>📋 Información del Repositorio</h4>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ color: 'var(--text-dim)' }}>ID del Repositorio:</span>
+                                            <span style={{ fontFamily: 'monospace', userSelect: 'all' }}>{activeRepo.repoId}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ color: 'var(--text-dim)' }}>Creado el:</span>
+                                            <span>{new Date(activeRepo.createdAt).toLocaleString()}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ color: 'var(--text-dim)' }}>Última modificación:</span>
+                                            <span>{new Date(activeRepo.updatedAt).toLocaleString()}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ color: 'var(--text-dim)' }}>Total de Ramas:</span>
+                                            <span>{branches.length}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                            <span style={{ color: 'var(--text-dim)' }}>Total de Commits:</span>
+                                            <span>{commits.length}</span>
+                                        </div>
+                                    </div>
+                                </Card>
+
+                                {/* Rename Card */}
+                                <Card style={{ padding: '20px', background: 'rgba(255,255,255,0.01)' }}>
+                                    <h4 style={{ margin: '0 0 12px 0', color: 'var(--text-main)' }}>✏️ Renombrar Repositorio</h4>
+                                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '0 0 15px 0' }}>
+                                        Cambia el nombre para identificar mejor este repositorio en tu bitDrive.
+                                    </p>
+                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                        <Input 
+                                            placeholder="Nuevo nombre del repositorio"
+                                            value={repoRenameValue}
+                                            onChange={(e) => setRepoRenameValue(e.target.value)}
+                                            style={{ flex: 1 }}
+                                        />
+                                        <Button variant="primary" onClick={handleRenameRepo}>
+                                            Guardar
+                                        </Button>
+                                    </div>
+                                </Card>
+
+                                {/* Discard Changes Card */}
+                                <Card style={{ padding: '20px', background: 'rgba(255,255,255,0.01)' }}>
+                                    <h4 style={{ margin: '0 0 12px 0', color: 'var(--text-main)' }}>🔄 Restaurar Directorio</h4>
+                                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '0 0 15px 0' }}>
+                                        Descarta todos los borradores y cambios sin confirmar, restableciendo el directorio de trabajo al último commit de la rama <strong style={{ color: 'var(--accent-blue)' }}>{activeBranch}</strong>.
+                                    </p>
+                                    <Button variant="ghost" onClick={handleDiscardLocalChanges}>
+                                        Descartar Cambios Locales
+                                    </Button>
+                                </Card>
+
+                                {/* Danger Zone Card */}
+                                <Card style={{ padding: '20px', border: '1px solid rgba(255,0,0,0.2)', background: 'rgba(255,0,0,0.02)' }}>
+                                    <h4 style={{ margin: '0 0 12px 0', color: 'var(--primary)' }}>⚠️ Zona de Peligro</h4>
+                                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '0 0 15px 0' }}>
+                                        Eliminar el repositorio borrará permanentemente todas sus ramas, commits y archivos de tu base de datos local. Esta acción es irreversible.
+                                    </p>
+                                    <Button variant="primary" style={{ background: 'var(--primary)', color: '#fff' }} onClick={handleDeleteRepo}>
+                                        Eliminar Repositorio Permanentemente
+                                    </Button>
+                                </Card>
                             </div>
                         )}
 
