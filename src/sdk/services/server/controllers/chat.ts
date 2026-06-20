@@ -64,7 +64,7 @@ export const chatController = {
         const contactos = await BitChatAuth.obtenerContactos();
         const contacto = contactos[p.chatId];
         
-        const canSync = contacto?.syncAllowedDevices?.includes(requestingDevice.deviceId);
+        const canSync = requestingDevice.globalSync || contacto?.syncAllowedDevices?.includes(requestingDevice.deviceId);
         if (!canSync) {
             throw new RPCError('FORBIDDEN', 'No tienes permisos para sincronizar este chat.', false);
         }

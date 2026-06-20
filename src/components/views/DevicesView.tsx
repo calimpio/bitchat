@@ -24,10 +24,15 @@ export const DevicesView: React.FC = () => {
                 publicKey: me?.publicKey,
                 accountCreatedAt: me?.createdAt
             },
-            ...storedDevices.map((d: any) => ({
-                ...d,
-                isOnline: !!Object.values(PeerService.conexionesP2PDirectas).find(c => c.conn?.peer === d.peerId && c.conn?.open)
-            }))
+            ...storedDevices.map((d: any) => {
+                const connDirecta = Object.values(PeerService.conexionesP2PDirectas).find(c => c.conn?.peer === d.peerId && c.conn?.open);
+                const connPersonal = PeerService.deviceConns && PeerService.deviceConns[d.deviceId];
+                const isOnline = !!(connDirecta || (connPersonal && connPersonal.open));
+                return {
+                    ...d,
+                    isOnline
+                };
+            })
         ];
 
         setDevices(currentDevices);
@@ -54,7 +59,7 @@ export const DevicesView: React.FC = () => {
 
             // Trigger active search every 10 seconds during the minute
             searchInterval = setInterval(() => {
-                PeerService.buscarDispositivos();
+                PeerService.buscarDispositivos(true);
             }, 10000) as unknown as number;
         } else if (searchTimeLeft === 0) {
             setIsSearching(false);
@@ -69,7 +74,7 @@ export const DevicesView: React.FC = () => {
     const handleSearch = () => {
         setIsSearching(true);
         setSearchTimeLeft(60);
-        PeerService.buscarDispositivos();
+        PeerService.buscarDispositivos(true);
     };
 
     const handleDeleteDevice = async (deviceId: string) => {

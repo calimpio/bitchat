@@ -28,7 +28,8 @@ export const ChatSettingsView: React.FC = () => {
     const toggleGlobalSyncPermission = async (deviceId: string) => {
         const contactIds = Object.keys(allContactos);
         const allowedCount = contactIds.filter(id => allContactos[id].syncAllowedDevices?.includes(deviceId)).length;
-        const isFullyAllowed = contactIds.length > 0 && allowedCount === contactIds.length;
+        const dev = devices.find(d => d.deviceId === deviceId);
+        const isFullyAllowed = dev?.globalSync === true || (contactIds.length > 0 && allowedCount === contactIds.length);
 
         if (!isFullyAllowed) {
             const confirmAction = window.confirm(`¿Estás seguro de autorizar a este dispositivo (${deviceId}) para sincronizar TODOS tus chats? Esto le dará acceso completo a tu historial actual y futuro.`);
@@ -38,6 +39,11 @@ export const ChatSettingsView: React.FC = () => {
         // Toggle permission for ALL contacts for this device
         const localDeviceId = localStorage.getItem('bit_device_id');
         if (deviceId === localDeviceId) return;
+
+        if (dev) {
+            dev.globalSync = !isFullyAllowed;
+            await DB.addDevice(dev);
+        }
 
         for (const id of contactIds) {
             const contact = allContactos[id];
@@ -78,8 +84,8 @@ export const ChatSettingsView: React.FC = () => {
                     {devices.map(dev => {
                         const contactIds = Object.keys(allContactos);
                         const allowedCount = contactIds.filter(id => allContactos[id].syncAllowedDevices?.includes(dev.deviceId)).length;
-                        const isFullyAllowed = contactIds.length > 0 && allowedCount === contactIds.length;
-                        const isPartiallyAllowed = allowedCount > 0 && allowedCount < contactIds.length;
+                        const isFullyAllowed = dev.globalSync === true || (contactIds.length > 0 && allowedCount === contactIds.length);
+                        const isPartiallyAllowed = !isFullyAllowed && allowedCount > 0;
 
                         return (
                             <div key={dev.deviceId} style={{ background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '10px', border: '1px solid var(--border)' }}>

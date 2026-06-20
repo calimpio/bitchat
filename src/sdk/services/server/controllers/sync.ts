@@ -21,7 +21,7 @@ export const syncController = {
         const allowedChatIds: string[] = [];
         
         for (const id in allContactos) { 
-            if (allContactos[id].syncAllowedDevices?.includes(requestingDevice.deviceId)) { 
+            if (requestingDevice.globalSync || allContactos[id].syncAllowedDevices?.includes(requestingDevice.deviceId)) { 
                 filteredContactos[id] = allContactos[id]; 
                 allowedChatIds.push(id); 
             } 

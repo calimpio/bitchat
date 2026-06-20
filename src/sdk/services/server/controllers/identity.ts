@@ -14,6 +14,10 @@ export const identityController = {
         const remoteDeviceId = p.deviceId || ctx.conn.peer!.replace('bc-v2-', '').split('-')[0];
         if (PeerService.deviceConns) PeerService.deviceConns[remoteDeviceId] = ctx.conn;
         
+        const allDevices = await DB.getDevices();
+        const existingDevice = allDevices.find(d => d.deviceId === remoteDeviceId);
+        const globalSync = existingDevice ? existingDevice.globalSync : false;
+        
         await DB.addDevice({ 
             deviceId: remoteDeviceId, 
             idPublico: p.deIdPublico, 
@@ -22,7 +26,8 @@ export const identityController = {
             lastSeen: Date.now(), 
             peerId: ctx.conn.peer, 
             publicKey: p.publicKey,
-            accountCreatedAt: p.createdAt
+            accountCreatedAt: p.createdAt,
+            globalSync
         });
 
         const soyMasAntiguo = !p.createdAt || ctx.misCreds!.createdAt < p.createdAt;
@@ -51,6 +56,11 @@ export const identityController = {
         if (!remoteDeviceId) return;
         
         if (PeerService.deviceConns) PeerService.deviceConns[remoteDeviceId] = ctx.conn;
+
+        const allDevices = await DB.getDevices();
+        const existingDevice = allDevices.find(d => d.deviceId === remoteDeviceId);
+        const globalSync = existingDevice ? existingDevice.globalSync : false;
+
         await DB.addDevice({ 
             deviceId: remoteDeviceId, 
             idPublico: ctx.conn.peer!.replace('bc-v2-', '').split('-')[0], 
@@ -59,7 +69,8 @@ export const identityController = {
             lastSeen: Date.now(), 
             peerId: ctx.conn.peer, 
             publicKey: p.publicKey,
-            accountCreatedAt: p.createdAt
+            accountCreatedAt: p.createdAt,
+            globalSync
         });
 
         if (p.creds) {

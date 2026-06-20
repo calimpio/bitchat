@@ -136,8 +136,8 @@ export const BitChatAuth: IBitChatAuth = {
             tokenCuartaCredencial, 
             insecure, 
             publicKey, 
-            syncAllowedDevices, 
-            sharedSecret,
+            syncAllowedDevices: syncAllowedDevices !== undefined ? syncAllowedDevices : old?.syncAllowedDevices, 
+            sharedSecret: sharedSecret !== undefined ? sharedSecret : old?.sharedSecret,
             createdAt: old?.createdAt || now,
             updatedAt: now
         };

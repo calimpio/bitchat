@@ -79,7 +79,7 @@ export interface IPeerService {
     conectarADispositivoPersonal(targetId: string): Promise<void>;
 
     /** Actively searches for other personal devices for a period of time. */
-    buscarDispositivos(): Promise<void>;
+    buscarDispositivos(forceAll?: boolean): Promise<void>;
 
     /** 
      * Initiates a P2P synchronization probe between devices owned by the same user 

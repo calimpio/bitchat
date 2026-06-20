@@ -156,10 +156,10 @@ export const PeerService: IPeerService = {
         this._procesarEntrante(conn);
     },
 
-    async buscarDispositivos(): Promise<void> {
+    async buscarDispositivos(forceAll: boolean = false): Promise<void> {
         const misCreds = await BitChatAuth.obtenerMisCredenciales();
         if (!misCreds) return;
-        console.log('Iniciando búsqueda selectiva de terminales autorizadas...');
+        console.log('Iniciando búsqueda de terminales autorizadas...');
         const contactos = await BitChatAuth.obtenerContactos();
         const authorizedDeviceIds = new Set<string>();
         for (const id in contactos) {
@@ -167,7 +167,7 @@ export const PeerService: IPeerService = {
         }
         const devices = await DB.getDevices();
         for (const dev of devices) {
-            if (authorizedDeviceIds.has(dev.deviceId) && dev.peerId && dev.peerId !== this.peer?.id) {
+            if ((forceAll || authorizedDeviceIds.has(dev.deviceId)) && dev.peerId && dev.peerId !== this.peer?.id) {
                 this.conectarADispositivoPersonal(dev.peerId);
             }
         }
@@ -397,7 +397,12 @@ export const PeerService: IPeerService = {
         if (!misCreds || !misCreds.publicKey || !this.deviceConns) return;
         const contactos = await BitChatAuth.obtenerContactos();
         const contact = contactos[msg.chatId];
-        if (!contact || !contact.syncAllowedDevices || contact.syncAllowedDevices.length === 0) return;
+        
+        const allDevices = await DB.getDevices();
+        const hasGloballyAllowed = allDevices.some(d => d.globalSync && d.deviceId !== this.localDeviceId);
+        const hasChatAllowed = contact?.syncAllowedDevices && contact.syncAllowedDevices.length > 0;
+        if (!hasGloballyAllowed && !hasChatAllowed) return;
+
         const msgCopy = { ...msg };
         if (msgCopy.iv && !msgCopy.ciphertext) {
             try { const decrypted = await DB.decryptMsg(msgCopy.msg, msgCopy.iv); if (decrypted !== '[Decryption Error]') { msgCopy.msg = decrypted; msgCopy.iv = undefined; } } catch (e) { }
@@ -407,10 +412,13 @@ export const PeerService: IPeerService = {
             if (sharedKey) { try { msgCopy.msg = await CryptoService.decrypt(sharedKey, msgCopy.ciphertext, msgCopy.iv); msgCopy.ciphertext = undefined; msgCopy.iv = undefined; } catch (e) { } }
         }
         const payload = { mensajes: [msgCopy], contactos: {} };
-        const allDevices = await DB.getDevices();
         for (const deviceId in this.deviceConns) {
-            if (contact.syncAllowedDevices.includes(deviceId) && deviceId !== this.localDeviceId) {
-                const conn = this.deviceConns[deviceId], device = allDevices.find(d => d.deviceId === deviceId);
+            const device = allDevices.find(d => d.deviceId === deviceId);
+            const isGloballyAllowed = device?.globalSync === true;
+            const isChatAllowed = contact?.syncAllowedDevices?.includes(deviceId) === true;
+
+            if ((isGloballyAllowed || isChatAllowed) && deviceId !== this.localDeviceId) {
+                const conn = this.deviceConns[deviceId];
                 if (conn.open && device?.publicKey) {
                     const vault = await VaultService.encryptForE2EE('SYNC_PAYLOAD', payload, device.publicKey);
                     conn.send({ tipo: 'SYNC_DATA', vault });

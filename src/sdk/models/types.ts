@@ -202,6 +202,7 @@ export interface Device {
     accountCreatedAt?: number; // Original creation time of the identity
     createdAt?: number; // When this specific terminal was first seen
     updatedAt?: number;
+    globalSync?: boolean; // True if this device is globally authorized to synchronize all chats
 }
 
 export interface AppState {
