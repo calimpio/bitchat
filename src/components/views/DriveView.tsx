@@ -42,9 +42,9 @@ export const DriveView: React.FC = () => {
     const [prCommentText, setPrCommentText] = useState('');
 
     // Cloning & Remote search state
-    const [showCloneModal, setShowCloneModal] = useState(false);
     const [remoteRepos, setRemoteRepos] = useState<{ repo: Repository; deviceId: string; deviceLabel: string }[]>([]);
     const [isSearchingRemotes, setIsSearchingRemotes] = useState(false);
+    const [driveHomeTab, setDriveHomeTab] = useState<'local' | 'devices'>('local');
 
     // Modals
     const [showCreateRepo, setShowCreateRepo] = useState(false);
@@ -540,7 +540,6 @@ export const DriveView: React.FC = () => {
     const handleSearchRemoteRepos = async () => {
         setIsSearchingRemotes(true);
         setRemoteRepos([]);
-        setShowCloneModal(true);
 
         const found: typeof remoteRepos = [];
         const onlineDevices = devices.filter(d => d.isOnline && d.label !== 'Este Dispositivo (Principal)');
@@ -610,7 +609,6 @@ export const DriveView: React.FC = () => {
             };
             await DB.saveRepository(clonedRepo);
 
-            setShowCloneModal(false);
             showAlert("Éxito", `Repositorio '${clonedRepo.name}' clonado con éxito.`);
             await loadRepositories();
         } catch (e: any) {
@@ -770,36 +768,133 @@ export const DriveView: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', maxWidth: '900px', margin: '0 auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h2 style={{ color: 'var(--primary)', margin: 0 }}>📂 bitDrive</h2>
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <Button variant="ghost" onClick={handleSearchRemoteRepos}>📥 Clonar Repositorio</Button>
-                        <Button variant="primary" onClick={() => setShowCreateRepo(true)}>📁 Nuevo Repositorio</Button>
-                    </div>
                 </div>
 
-                <p style={{ color: 'var(--text-dim)', fontSize: '14px', textAlign: 'center' }}>
-                    Versionador de archivos descentralizado tipo Git. Crea un repositorio para empezar a almacenar e importar tus carpetas.
+                <p style={{ color: 'var(--text-dim)', fontSize: '14px', textAlign: 'center', margin: '0 0 10px 0' }}>
+                    Versionador de archivos descentralizado tipo Git. Crea o clona un repositorio para empezar a versionar tus carpetas.
                 </p>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px', marginTop: '10px' }}>
-                    {repositories.map(repo => (
-                        <Card key={repo.repoId} style={{ padding: '20px', cursor: 'pointer' }} onClick={() => { setActiveRepo(repo); setActiveBranch('main'); }}>
-                            <h4 style={{ color: 'var(--accent-blue)', fontSize: '16px', marginBottom: '8px' }}>🏛️ {repo.name}</h4>
-                            <p style={{ fontSize: '11px', color: 'var(--text-dim)', wordBreak: 'break-all' }}>ID: {repo.repoId}</p>
-                            <div style={{ borderTop: '1px solid var(--border)', marginTop: '15px', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-dim)' }}>
-                                <span>Creado: {new Date(repo.createdAt).toLocaleDateString()}</span>
-                                <span>Activo</span>
-                            </div>
-                        </Card>
-                    ))}
+                {/* Sub-tab selection bar */}
+                <div style={{ display: 'flex', gap: '15px', borderBottom: '1px solid var(--border)', paddingBottom: '8px', marginBottom: '5px' }}>
+                    <span 
+                        onClick={() => setDriveHomeTab('local')}
+                        style={{ fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', color: driveHomeTab === 'local' ? 'var(--accent-blue)' : 'var(--text-dim)', borderBottom: driveHomeTab === 'local' ? '2px solid var(--accent-blue)' : '2px solid transparent', paddingBottom: '6px' }}
+                    >
+                        🏠 En mi local
+                    </span>
+                    <span 
+                        onClick={() => {
+                            setDriveHomeTab('devices');
+                            handleSearchRemoteRepos();
+                        }}
+                        style={{ fontSize: '14px', fontWeight: 'bold', cursor: 'pointer', color: driveHomeTab === 'devices' ? 'var(--accent-blue)' : 'var(--text-dim)', borderBottom: driveHomeTab === 'devices' ? '2px solid var(--accent-blue)' : '2px solid transparent', paddingBottom: '6px' }}
+                    >
+                        📱 En mis dispositivos
+                    </span>
                 </div>
 
-                {repositories.length === 0 && (
-                    <Card style={{ padding: '40px', borderStyle: 'dashed', background: 'transparent', textAlign: 'center' }}>
-                        <p style={{ fontSize: '14px', color: 'var(--text-dim)', marginBottom: '15px' }}>
-                            No se han encontrado repositorios. Inicializa uno para gestionar tus archivos y respaldos.
+                {driveHomeTab === 'local' && (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+                            <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>Repositorios Locales</span>
+                            <Button variant="primary" onClick={() => setShowCreateRepo(true)}>📁 Nuevo Repositorio</Button>
+                        </div>
+                        
+                        <p style={{ color: 'var(--text-dim)', fontSize: '12px', margin: '2px 0 15px 0' }}>
+                            Repositorios locales almacenados en este dispositivo (creados aquí o clonados de otros).
                         </p>
-                        <Button variant="ghost" style={{ margin: '0 auto' }} onClick={() => setShowCreateRepo(true)}>Inicializar Primer Repositorio</Button>
-                    </Card>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px' }}>
+                            {repositories.map(repo => {
+                                const isRemote = repo.originDeviceId && repo.originDeviceId !== (localStorage.getItem('bit_device_id') || 'local');
+                                return (
+                                    <Card key={repo.repoId} style={{ padding: '20px', cursor: 'pointer', border: isRemote ? '1px dashed var(--accent-blue)' : '1px solid var(--border)' }} onClick={() => { setActiveRepo(repo); setActiveBranch('main'); }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                            <h4 style={{ color: 'var(--accent-blue)', fontSize: '16px', margin: '0 0 8px 0' }}>🏛️ {repo.name}</h4>
+                                            {isRemote && (
+                                                <span style={{ fontSize: '9px', fontWeight: 'bold', background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', padding: '2px 6px', borderRadius: '10px', border: '1px solid rgba(59,130,246,0.3)' }}>
+                                                    CLONADO
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p style={{ fontSize: '11px', color: 'var(--text-dim)', wordBreak: 'break-all', margin: '0 0 15px 0' }}>ID: {repo.repoId}</p>
+                                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px', display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-dim)' }}>
+                                            <span>Creado: {new Date(repo.createdAt).toLocaleDateString()}</span>
+                                            <span>Activo</span>
+                                        </div>
+                                    </Card>
+                                );
+                            })}
+                        </div>
+
+                        {repositories.length === 0 && (
+                            <Card style={{ padding: '40px', borderStyle: 'dashed', background: 'transparent', textAlign: 'center', marginTop: '10px' }}>
+                                <p style={{ fontSize: '14px', color: 'var(--text-dim)', marginBottom: '15px' }}>
+                                    No se han encontrado repositorios locales.
+                                </p>
+                                <Button variant="ghost" style={{ margin: '0 auto' }} onClick={() => setShowCreateRepo(true)}>Inicializar Primer Repositorio</Button>
+                            </Card>
+                        )}
+                    </>
+                )}
+
+                {driveHomeTab === 'devices' && (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px' }}>
+                            <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>Repositorios en la red P2P</span>
+                            <Button variant="ghost" onClick={handleSearchRemoteRepos} disabled={isSearchingRemotes}>
+                                {isSearchingRemotes ? 'Buscando...' : '🔍 Buscar Repositorios'}
+                            </Button>
+                        </div>
+                        
+                        <p style={{ color: 'var(--text-dim)', fontSize: '12px', margin: '2px 0 15px 0' }}>
+                            Busca repositorios en tus otros dispositivos conectados en línea para clonarlos localmente (los transmite a tu base de datos IndexedDB).
+                        </p>
+
+                        {isSearchingRemotes ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px', gap: '12px' }}>
+                                <span style={{ fontSize: '32px' }}>🔄</span>
+                                <span style={{ fontSize: '14px', color: 'var(--text-dim)' }}>Consultando dispositivos conectados en línea...</span>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
+                                {remoteRepos.map(item => (
+                                    <Card key={item.repo.repoId} style={{ padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '15px' }}>
+                                        <div>
+                                            <h4 style={{ color: 'var(--text-main)', fontSize: '16px', margin: '0 0 8px 0' }}>🏛️ {item.repo.name}</h4>
+                                            <span style={{ fontSize: '11px', color: 'var(--accent-blue)', display: 'block', marginBottom: '4px' }}>
+                                                Dispositivo: <strong>{item.deviceLabel}</strong>
+                                            </span>
+                                            <span style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--text-dim)', wordBreak: 'break-all' }}>
+                                                ID: {item.repo.repoId}
+                                            </span>
+                                        </div>
+                                        <div style={{ borderTop: '1px solid var(--border)', paddingTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                                                Modificado: {new Date(item.repo.updatedAt).toLocaleDateString()}
+                                            </span>
+                                            <Button 
+                                                variant="success" 
+                                                className="btn-sm" 
+                                                onClick={async () => {
+                                                    await handleCloneRemoteRepo(item.repo.repoId, item.deviceId);
+                                                    setDriveHomeTab('local');
+                                                }}
+                                            >
+                                                📥 Clonar
+                                            </Button>
+                                        </div>
+                                    </Card>
+                                ))}
+
+                                {remoteRepos.length === 0 && (
+                                    <div style={{ gridColumn: '1 / -1', padding: '40px', textAlign: 'center', border: '1px dashed var(--border)', borderRadius: '10px', color: 'var(--text-dim)' }}>
+                                        No se encontraron repositorios clonables en línea. Asegúrate de tener otras terminales enlazadas y activas.
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </>
                 )}
 
                 <Modal active={showCreateRepo} title="Crear Repositorio" onClose={() => setShowCreateRepo(false)}>
@@ -1627,67 +1722,6 @@ export const DriveView: React.FC = () => {
                 </div>
             </Modal>
 
-            {/* Clone Repository Modal */}
-            <Modal active={showCloneModal} title="Clonar Repositorio" onClose={() => setShowCloneModal(false)}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', minWidth: '320px' }}>
-                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: 0 }}>
-                        Busca repositorios alojados en tus otros dispositivos bitDevice que estén en línea y clónalos localmente.
-                    </p>
-
-                    {isSearchingRemotes ? (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', gap: '10px' }}>
-                            <span style={{ fontSize: '24px' }}>🔄</span>
-                            <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>Consultando dispositivos conectados...</span>
-                        </div>
-                    ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
-                            {remoteRepos.map(item => (
-                                <div 
-                                    key={item.repo.repoId} 
-                                    style={{ 
-                                        padding: '12px', 
-                                        borderRadius: '8px', 
-                                        background: 'rgba(255,255,255,0.02)', 
-                                        border: '1px solid var(--border)', 
-                                        display: 'flex', 
-                                        justifyContent: 'space-between', 
-                                        alignItems: 'center' 
-                                    }}
-                                >
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>🏛️ {item.repo.name}</span>
-                                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>En: {item.deviceLabel}</span>
-                                        <span style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--text-dim)' }}>ID: {item.repo.repoId.substring(0, 8)}...</span>
-                                    </div>
-                                    <Button 
-                                        variant="success" 
-                                        className="btn-sm" 
-                                        onClick={() => handleCloneRemoteRepo(item.repo.repoId, item.deviceId)}
-                                        style={{ padding: '6px 12px', fontSize: '12px' }}
-                                    >
-                                        Clonar
-                                    </Button>
-                                </div>
-                            ))}
-
-                            {remoteRepos.length === 0 && (
-                                <div style={{ padding: '20px', textAlign: 'center', border: '1px dashed var(--border)', borderRadius: '8px', color: 'var(--text-dim)', fontSize: '12px' }}>
-                                    No se encontraron repositorios clonables. Asegúrate de tener otros dispositivos encendidos, vinculados y en línea en bitDevices.
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
-                        <Button variant="ghost" style={{ flex: 1 }} onClick={() => setShowCloneModal(false)}>
-                            Cerrar
-                        </Button>
-                        <Button variant="primary" style={{ flex: 1 }} onClick={handleSearchRemoteRepos} disabled={isSearchingRemotes}>
-                            🔄 Recargar
-                        </Button>
-                    </div>
-                </div>
-            </Modal>
 
             {/* Custom popup modal */}
             {popup && (
