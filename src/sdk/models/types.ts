@@ -60,7 +60,15 @@ export type TipoPaquete =
     | 'MSG_ACK' 
     | 'GET_MESSAGES'
     | 'SYNC_REQUEST' 
-    | 'SYNC_DATA';
+    | 'SYNC_DATA'
+    | 'DRIVE_LIST_REPOS_REQ'
+    | 'DRIVE_LIST_REPOS_RESP'
+    | 'DRIVE_CLONE_REQ'
+    | 'DRIVE_CLONE_RESP'
+    | 'DRIVE_PULL_REQ'
+    | 'DRIVE_PULL_RESP'
+    | 'DRIVE_PUSH_REQ'
+    | 'DRIVE_PUSH_RESP';
 
 export interface IPaqueteBase {
     tipo: TipoPaquete;
@@ -175,6 +183,53 @@ export interface IPaqueteGetMessages extends IPaqueteBase {
     lastTime?: number;
 }
 
+export interface IPaqueteDriveListReposReq extends IPaqueteBase {
+    tipo: 'DRIVE_LIST_REPOS_REQ';
+}
+
+export interface IPaqueteDriveListReposResp extends IPaqueteBase {
+    tipo: 'DRIVE_LIST_REPOS_RESP';
+    repos: any[];
+}
+
+export interface IPaqueteDriveCloneReq extends IPaqueteBase {
+    tipo: 'DRIVE_CLONE_REQ';
+    repoId: string;
+}
+
+export interface IPaqueteDriveCloneResp extends IPaqueteBase {
+    tipo: 'DRIVE_CLONE_RESP';
+    repo: any;
+    branches: any[];
+    objects: any[];
+    pullRequests?: any[];
+}
+
+export interface IPaqueteDrivePullReq extends IPaqueteBase {
+    tipo: 'DRIVE_PULL_REQ';
+    repoId: string;
+}
+
+export interface IPaqueteDrivePullResp extends IPaqueteBase {
+    tipo: 'DRIVE_PULL_RESP';
+    branches: any[];
+    objects: any[];
+    pullRequests?: any[];
+}
+
+export interface IPaqueteDrivePushReq extends IPaqueteBase {
+    tipo: 'DRIVE_PUSH_REQ';
+    repoId: string;
+    branches: any[];
+    objects: any[];
+    pullRequests?: any[];
+}
+
+export interface IPaqueteDrivePushResp extends IPaqueteBase {
+    tipo: 'DRIVE_PUSH_RESP';
+    success: boolean;
+}
+
 export type IPaqueteData = 
     | IPaqueteIdentityProbe 
     | IPaqueteIdentityMatch
@@ -189,7 +244,15 @@ export type IPaqueteData =
     | IPaqueteMsgAck 
     | IPaqueteGetMessages
     | IPaqueteSyncRequest 
-    | IPaqueteSyncData;
+    | IPaqueteSyncData
+    | IPaqueteDriveListReposReq
+    | IPaqueteDriveListReposResp
+    | IPaqueteDriveCloneReq
+    | IPaqueteDriveCloneResp
+    | IPaqueteDrivePullReq
+    | IPaqueteDrivePullResp
+    | IPaqueteDrivePushReq
+    | IPaqueteDrivePushResp;
 
 export interface Device {
     deviceId: string; // Key in database

@@ -9,13 +9,18 @@ import { chatController } from './controllers/chat.ts';
 import { handshakeController } from './controllers/handshake.ts';
 import { DB } from '../db.ts';
 import { PeerService } from '../peer.ts';
+import { driveRPCController } from './controllers/drive.ts';
 
 const responseTypeMap: Record<string, string> = {
     'IDENTITY_PROBE': 'IDENTITY_MATCH',
     'SYNC_REQUEST': 'SYNC_DATA',
     'MSG': 'MSG_ACK',
     'CONNECTION_REQ': 'CONNECTION_ACCEPTED',
-    'HANDSHAKE_START': 'HANDSHAKE_FINAL'
+    'HANDSHAKE_START': 'HANDSHAKE_FINAL',
+    'DRIVE_LIST_REPOS_REQ': 'DRIVE_LIST_REPOS_RESP',
+    'DRIVE_CLONE_REQ': 'DRIVE_CLONE_RESP',
+    'DRIVE_PULL_REQ': 'DRIVE_PULL_RESP',
+    'DRIVE_PUSH_REQ': 'DRIVE_PUSH_RESP'
 };
 
 export const RPCRouter = {
@@ -65,6 +70,10 @@ export const RPCRouter = {
                 case 'CONNECTION_REJECTED': await handshakeController.handleConnectionRejected(ctx); break;
                 case 'HANDSHAKE_START': await handshakeController.handleHandshakeStart(ctx); break;
                 case 'HANDSHAKE_FINAL': await handshakeController.handleHandshakeFinal(ctx); break;
+                case 'DRIVE_LIST_REPOS_REQ': await driveRPCController.handleListRepos(ctx); break;
+                case 'DRIVE_CLONE_REQ': await driveRPCController.handleClone(ctx); break;
+                case 'DRIVE_PULL_REQ': await driveRPCController.handlePull(ctx); break;
+                case 'DRIVE_PUSH_REQ': await driveRPCController.handlePush(ctx); break;
             }
 
             if (PeerService.onRefresh) PeerService.onRefresh();

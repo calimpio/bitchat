@@ -1,6 +1,6 @@
 import { Message, RequestRecord, Credentials, Device } from '../../models/types.ts';
 import { EncryptedVaultObject } from '../../models/vault.ts';
-import { Repository, Branch, DriveObject } from '../../models/drive.ts';
+import { Repository, Branch, DriveObject, PullRequest } from '../../models/drive.ts';
 
 /**
  * IDBService handles local persistence using IndexedDB.
@@ -109,4 +109,7 @@ export interface IDBService {
     getBranches(repoId: string): Promise<Branch[]>;
     saveDriveObject(obj: DriveObject): Promise<void>;
     getDriveObject(hash: string): Promise<DriveObject | null>;
+    savePullRequest(pr: PullRequest): Promise<void>;
+    getPullRequests(repoId: string): Promise<PullRequest[]>;
+    getPullRequest(repoId: string, prId: string): Promise<PullRequest | null>;
 }

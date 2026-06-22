@@ -1,6 +1,7 @@
 export interface Repository {
     repoId: string;
     name: string;
+    originDeviceId?: string;
     createdAt: number;
     updatedAt: number;
 }
@@ -33,3 +34,26 @@ export interface DriveObject {
     type: 'blob' | 'tree' | 'commit';
     content: string; // Serialized or base64 encoded data
 }
+
+export interface PRComment {
+    commentId: string;
+    author: string;
+    text: string;
+    timestamp: number;
+}
+
+export interface PullRequest {
+    prId: string;
+    repoId: string;
+    title: string;
+    description: string;
+    sourceBranch: string;
+    targetBranch: string;
+    status: 'open' | 'merged' | 'closed';
+    author: string;
+    createdAt: number;
+    mergedAt?: number;
+    closedAt?: number;
+    comments?: PRComment[];
+}
+

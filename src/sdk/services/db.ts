@@ -1,5 +1,5 @@
 import { Message, RequestRecord, Credentials, Device } from '../models/types.ts';
-import { Repository, Branch, DriveObject } from '../models/drive.ts';
+import { Repository, Branch, DriveObject, PullRequest } from '../models/drive.ts';
 import { useStore } from '../../store/useStore.ts';
 import { CryptoService } from './crypto.ts';
 import { IDBService } from './interfaces/IDBService.ts';
@@ -10,7 +10,7 @@ export const DB: IDBService = {
 
     init(): Promise<void> {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('bitchat_db', 13);
+            const req = indexedDB.open('bitchat_db', 14);
             req.onupgradeneeded = (e: IDBVersionChangeEvent) => {
                 const db = (e.target as IDBOpenDBRequest).result;
                 const tx = (e.target as IDBOpenDBRequest).transaction!;
@@ -53,6 +53,9 @@ export const DB: IDBService = {
                 }
                 if (!db.objectStoreNames.contains('drive_objects')) {
                     db.createObjectStore('drive_objects', { keyPath: 'hash' });
+                }
+                if (!db.objectStoreNames.contains('drive_pull_requests')) {
+                    db.createObjectStore('drive_pull_requests', { keyPath: 'prId' });
                 }
             };
             req.onsuccess = (e: Event) => {
@@ -477,12 +480,17 @@ export const DB: IDBService = {
         return new Promise(async (resolve) => {
             if (!this.db) return resolve();
             const branches = await this.getBranches(repoId);
-            const tx = this.db.transaction(['drive_repositories', 'drive_branches'], 'readwrite');
+            const pullRequests = await this.getPullRequests(repoId);
+            const tx = this.db.transaction(['drive_repositories', 'drive_branches', 'drive_pull_requests'], 'readwrite');
             const repoStore = tx.objectStore('drive_repositories');
             const branchStore = tx.objectStore('drive_branches');
+            const prStore = tx.objectStore('drive_pull_requests');
             repoStore.delete(repoId);
             for (const b of branches) {
                 branchStore.delete(b.branchId);
+            }
+            for (const pr of pullRequests) {
+                prStore.delete(pr.prId);
             }
             tx.oncomplete = () => resolve();
             tx.onerror = () => resolve();
@@ -538,6 +546,46 @@ export const DB: IDBService = {
             const store = tx.objectStore('drive_objects');
             const req = store.get(hash);
             req.onsuccess = () => resolve((req.result as DriveObject) || null);
+            req.onerror = () => resolve(null);
+        });
+    },
+
+    async savePullRequest(pr: PullRequest): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('drive_pull_requests', 'readwrite');
+            const store = tx.objectStore('drive_pull_requests');
+            store.put(pr).onsuccess = () => resolve();
+        });
+    },
+
+    async getPullRequests(repoId: string): Promise<PullRequest[]> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve([]);
+            const tx = this.db.transaction('drive_pull_requests', 'readonly');
+            const store = tx.objectStore('drive_pull_requests');
+            const req = store.getAll();
+            req.onsuccess = () => {
+                const all = (req.result as PullRequest[]) || [];
+                resolve(all.filter(pr => pr.repoId === repoId));
+            };
+        });
+    },
+
+    async getPullRequest(repoId: string, prId: string): Promise<PullRequest | null> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve(null);
+            const tx = this.db.transaction('drive_pull_requests', 'readonly');
+            const store = tx.objectStore('drive_pull_requests');
+            const req = store.get(prId);
+            req.onsuccess = () => {
+                const pr = req.result as PullRequest;
+                if (pr && pr.repoId === repoId) {
+                    resolve(pr);
+                } else {
+                    resolve(null);
+                }
+            };
             req.onerror = () => resolve(null);
         });
     }

@@ -1,6 +1,6 @@
 import { DB } from './db.ts';
 import { BitChatAuth } from './auth.ts';
-import { Repository, Branch, Commit, DriveObject, TreeEntry } from '../models/drive.ts';
+import { Repository, Branch, Commit, DriveObject, TreeEntry, PullRequest, PRComment } from '../models/drive.ts';
 import { IDriveService } from './interfaces/IDriveService.ts';
 
 // Helper function to calculate standard SHA-256 hash of a string
@@ -67,9 +67,11 @@ export const DriveService: IDriveService = {
         await DB.saveBranch(branch);
 
         // 4. Create repository record
+        const localDeviceId = localStorage.getItem('bit_device_id') || 'local';
         const repo: Repository = {
             repoId,
             name,
+            originDeviceId: localDeviceId,
             createdAt: now,
             updatedAt: now
         };
@@ -279,5 +281,108 @@ export const DriveService: IDriveService = {
         repo.name = newName;
         repo.updatedAt = Date.now();
         await DB.saveRepository(repo);
+    },
+
+    async listPullRequests(repoId: string): Promise<PullRequest[]> {
+        return await DB.getPullRequests(repoId);
+    },
+
+    async createPullRequest(repoId: string, title: string, description: string, sourceBranch: string, targetBranch: string): Promise<PullRequest> {
+        const repo = await DB.getRepository(repoId);
+        if (!repo) throw new Error(`Repository ${repoId} not found.`);
+        if (sourceBranch === targetBranch) throw new Error("Las ramas de origen y destino no pueden ser iguales.");
+
+        const source = await DB.getBranch(repoId, sourceBranch);
+        if (!source) throw new Error(`Rama de origen ${sourceBranch} no encontrada.`);
+
+        const target = await DB.getBranch(repoId, targetBranch);
+        if (!target) throw new Error(`Rama de destino ${targetBranch} no encontrada.`);
+
+        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const author = misCreds?.idPublico || 'local-owner';
+        const now = Date.now();
+
+        const pr: PullRequest = {
+            prId: crypto.randomUUID(),
+            repoId,
+            title,
+            description,
+            sourceBranch,
+            targetBranch,
+            status: 'open',
+            author,
+            createdAt: now
+        };
+
+        await DB.savePullRequest(pr);
+        return pr;
+    },
+
+    async getPullRequest(repoId: string, prId: string): Promise<PullRequest | null> {
+        return await DB.getPullRequest(repoId, prId);
+    },
+
+    async mergePullRequest(repoId: string, prId: string): Promise<Commit> {
+        const pr = await DB.getPullRequest(repoId, prId);
+        if (!pr) throw new Error(`Pull request ${prId} no encontrado.`);
+        if (pr.status !== 'open') throw new Error(`El pull request no está abierto (estado actual: ${pr.status}).`);
+
+        const sourceFiles = await this.checkoutBranch(repoId, pr.sourceBranch);
+        const targetFiles = await this.checkoutBranch(repoId, pr.targetBranch);
+
+        const mergedFilesMap = new Map<string, string>();
+        for (const f of targetFiles) {
+            mergedFilesMap.set(f.path, f.content);
+        }
+        for (const f of sourceFiles) {
+            mergedFilesMap.set(f.path, f.content);
+        }
+
+        const mergedFiles = Array.from(mergedFilesMap.entries()).map(([path, content]) => ({ path, content }));
+        const commitMsg = `Merge pull request #${pr.prId.substring(0, 4)}: ${pr.title}`;
+        
+        const commit = await this.createCommit(repoId, pr.targetBranch, commitMsg, mergedFiles);
+
+        // Update PR state
+        pr.status = 'merged';
+        pr.mergedAt = Date.now();
+        await DB.savePullRequest(pr);
+
+        return commit;
+    },
+
+    async closePullRequest(repoId: string, prId: string): Promise<void> {
+        const pr = await DB.getPullRequest(repoId, prId);
+        if (!pr) throw new Error(`Pull request ${prId} no encontrado.`);
+        if (pr.status !== 'open') throw new Error(`El pull request no está abierto.`);
+
+        pr.status = 'closed';
+        pr.closedAt = Date.now();
+        await DB.savePullRequest(pr);
+    },
+
+    async addPullRequestComment(repoId: string, prId: string, text: string): Promise<PRComment> {
+        const pr = await DB.getPullRequest(repoId, prId);
+        if (!pr) throw new Error(`Pull request ${prId} no encontrado.`);
+        if (pr.status !== 'open') throw new Error("No se puede comentar en un Pull Request cerrado o fusionado.");
+
+        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const author = misCreds?.idPublico || 'local-owner';
+        const now = Date.now();
+
+        const comment: PRComment = {
+            commentId: crypto.randomUUID(),
+            author,
+            text: text.trim(),
+            timestamp: now
+        };
+
+        if (!pr.comments) {
+            pr.comments = [];
+        }
+        pr.comments.push(comment);
+
+        await DB.savePullRequest(pr);
+        return comment;
     }
 };

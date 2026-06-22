@@ -1,4 +1,4 @@
-import { Repository, Branch, Commit } from '../../models/drive.ts';
+import { Repository, Branch, Commit, PullRequest, PRComment } from '../../models/drive.ts';
 
 export interface IDriveService {
     /** Creates a new Git-like repository and an initial empty commit on the default branch ('main'). */
@@ -30,4 +30,22 @@ export interface IDriveService {
 
     /** Renames a repository. */
     renameRepository(repoId: string, newName: string): Promise<void>;
+
+    /** Lists all pull requests for a specific repository. */
+    listPullRequests(repoId: string): Promise<PullRequest[]>;
+
+    /** Creates a new pull request. */
+    createPullRequest(repoId: string, title: string, description: string, sourceBranch: string, targetBranch: string): Promise<PullRequest>;
+
+    /** Retrieves a specific pull request. */
+    getPullRequest(repoId: string, prId: string): Promise<PullRequest | null>;
+
+    /** Merges a pull request by combining files and creating a merge commit. */
+    mergePullRequest(repoId: string, prId: string): Promise<Commit>;
+
+    /** Closes a pull request without merging. */
+    closePullRequest(repoId: string, prId: string): Promise<void>;
+
+    /** Adds a comment to an open pull request. */
+    addPullRequestComment(repoId: string, prId: string, text: string): Promise<PRComment>;
 }

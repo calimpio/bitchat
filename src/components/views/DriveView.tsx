@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore.ts';
-import { DriveService, DB } from '../../sdk/index.ts';
-import { Repository, Branch, Commit, TreeEntry } from '../../sdk/models/drive.ts';
+import { DriveService, DB, PeerService } from '../../sdk/index.ts';
+import { Repository, Branch, Commit, TreeEntry, PullRequest, PRComment, DriveObject } from '../../sdk/models/drive.ts';
 import { Card } from '../ui/Card.tsx';
 import { Button } from '../ui/Button.tsx';
 import { Input } from '../ui/Input.tsx';
 import { Modal } from '../ui/Modal.tsx';
 
 export const DriveView: React.FC = () => {
-    const { me } = useStore();
+    const { me, devices } = useStore();
     const [repositories, setRepositories] = useState<Repository[]>([]);
     const [activeRepo, setActiveRepo] = useState<Repository | null>(null);
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -27,7 +27,24 @@ export const DriveView: React.FC = () => {
     
     // Commit Message State
     const [commitMessage, setCommitMessage] = useState('');
-    const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'settings'>('editor');
+    const [activeTab, setActiveTab] = useState<'editor' | 'history' | 'settings' | 'pullrequests'>('editor');
+
+    // Pull Requests State
+    const [pullRequests, setPullRequests] = useState<PullRequest[]>([]);
+    const [activePR, setActivePR] = useState<PullRequest | null>(null);
+    const [showCreatePRModal, setShowCreatePRModal] = useState(false);
+    const [newPRTitle, setNewPRTitle] = useState('');
+    const [newPRDescription, setNewPRDescription] = useState('');
+    const [newPRSource, setNewPRSource] = useState('');
+    const [newPRTarget, setNewPRTarget] = useState('main');
+    const [prDiffFiles, setPrDiffFiles] = useState<{ path: string; status: 'added' | 'modified' | 'deleted'; sourceContent?: string; targetContent?: string }[]>([]);
+    const [selectedDiffFile, setSelectedDiffFile] = useState<string | null>(null);
+    const [prCommentText, setPrCommentText] = useState('');
+
+    // Cloning & Remote search state
+    const [showCloneModal, setShowCloneModal] = useState(false);
+    const [remoteRepos, setRemoteRepos] = useState<{ repo: Repository; deviceId: string; deviceLabel: string }[]>([]);
+    const [isSearchingRemotes, setIsSearchingRemotes] = useState(false);
 
     // Modals
     const [showCreateRepo, setShowCreateRepo] = useState(false);
@@ -113,6 +130,9 @@ export const DriveView: React.FC = () => {
         try {
             const list = await DriveService.listBranches(repo.repoId);
             setBranches(list);
+
+            const prs = await DriveService.listPullRequests(repo.repoId);
+            setPullRequests(prs);
 
             const activeBranchObj = list.find(b => b.name === branchName) || list[0];
             const currentBranchName = activeBranchObj ? activeBranchObj.name : 'main';
@@ -405,6 +425,311 @@ export const DriveView: React.FC = () => {
         }
     };
 
+    const loadPRDiffs = async (pr: PullRequest) => {
+        if (!activeRepo) return;
+        try {
+            const sourceFiles = await DriveService.checkoutBranch(activeRepo.repoId, pr.sourceBranch);
+            const targetFiles = await DriveService.checkoutBranch(activeRepo.repoId, pr.targetBranch);
+            
+            const diffs: typeof prDiffFiles = [];
+            
+            for (const sf of sourceFiles) {
+                const tf = targetFiles.find(f => f.path === sf.path);
+                if (!tf) {
+                    diffs.push({ path: sf.path, status: 'added', sourceContent: sf.content });
+                } else if (tf.content !== sf.content) {
+                    diffs.push({ path: sf.path, status: 'modified', sourceContent: sf.content, targetContent: tf.content });
+                }
+            }
+            
+            for (const tf of targetFiles) {
+                const sf = sourceFiles.find(f => f.path === tf.path);
+                if (!sf) {
+                    diffs.push({ path: tf.path, status: 'deleted', targetContent: tf.content });
+                }
+            }
+            
+            setPrDiffFiles(diffs);
+            setSelectedDiffFile(null);
+        } catch (e) {
+            console.error("Error loading PR diffs", e);
+        }
+    };
+
+    const handleCreatePR = async () => {
+        if (!activeRepo) return;
+        if (!newPRTitle.trim()) return showAlert("Error", "El título es requerido");
+        if (!newPRSource || !newPRTarget) return showAlert("Error", "Debes seleccionar las ramas de origen y destino.");
+        if (newPRSource === newPRTarget) return showAlert("Error", "Las ramas de origen y destino no pueden ser iguales.");
+        try {
+            const pr = await DriveService.createPullRequest(
+                activeRepo.repoId,
+                newPRTitle.trim(),
+                newPRDescription.trim(),
+                newPRSource,
+                newPRTarget
+            );
+            setNewPRTitle('');
+            setNewPRDescription('');
+            setShowCreatePRModal(false);
+            showAlert("Éxito", "Pull Request creado con éxito.");
+            await loadRepoData(activeRepo, activeBranch);
+            setActivePR(pr);
+            await loadPRDiffs(pr);
+        } catch (e: any) {
+            showAlert("Error", e.message || "Error al crear el pull request");
+        }
+    };
+
+    const handleMergePR = async (pr: PullRequest) => {
+        if (!activeRepo) return;
+        showConfirm(
+            "Fusionar Pull Request", 
+            `¿Fusionar la rama '${pr.sourceBranch}' en '${pr.targetBranch}'? Esto aplicará todos los cambios y creará un nuevo commit de fusión en '${pr.targetBranch}'.`,
+            async () => {
+                try {
+                    await DriveService.mergePullRequest(activeRepo.repoId, pr.prId);
+                    showAlert("Éxito", "Pull Request fusionado con éxito.");
+                    await loadRepoData(activeRepo, activeBranch);
+                    const updatedPR = await DriveService.getPullRequest(activeRepo.repoId, pr.prId);
+                    setActivePR(updatedPR);
+                    if (updatedPR) {
+                        await loadPRDiffs(updatedPR);
+                    }
+                } catch (e: any) {
+                    showAlert("Error", e.message || "Error al fusionar el pull request");
+                }
+            }
+        );
+    };
+
+    const handleClosePR = async (pr: PullRequest) => {
+        if (!activeRepo) return;
+        showConfirm(
+            "Cerrar Pull Request", 
+            `¿Estás seguro de que deseas cerrar este Pull Request sin fusionar los cambios?`,
+            async () => {
+                try {
+                    await DriveService.closePullRequest(activeRepo.repoId, pr.prId);
+                    showAlert("Cerrado", "Pull Request cerrado con éxito.");
+                    await loadRepoData(activeRepo, activeBranch);
+                    const updatedPR = await DriveService.getPullRequest(activeRepo.repoId, pr.prId);
+                    setActivePR(updatedPR);
+                } catch (e: any) {
+                    showAlert("Error", e.message || "Error al cerrar el pull request");
+                }
+            }
+        );
+    };
+
+    const handleAddPRComment = async () => {
+        if (!activeRepo || !activePR) return;
+        if (!prCommentText.trim()) return;
+
+        try {
+            await DriveService.addPullRequestComment(activeRepo.repoId, activePR.prId, prCommentText.trim());
+            setPrCommentText('');
+            const updatedPR = await DriveService.getPullRequest(activeRepo.repoId, activePR.prId);
+            setActivePR(updatedPR);
+            await loadRepoData(activeRepo, activeBranch);
+        } catch (e: any) {
+            showAlert("Error", e.message || "Error al agregar comentario");
+        }
+    };
+
+    const handleSearchRemoteRepos = async () => {
+        setIsSearchingRemotes(true);
+        setRemoteRepos([]);
+        setShowCloneModal(true);
+
+        const found: typeof remoteRepos = [];
+        const onlineDevices = devices.filter(d => d.isOnline && d.label !== 'Este Dispositivo (Principal)');
+
+        for (const device of onlineDevices) {
+            try {
+                const conn = PeerService.deviceConns && PeerService.deviceConns[device.deviceId];
+                if (conn && conn.open) {
+                    const response = await PeerService.request<{ repos: Repository[] }>(conn, 'DRIVE_LIST_REPOS_REQ', {});
+                    if (response && response.repos) {
+                        for (const r of response.repos) {
+                            const exists = repositories.some(local => local.repoId === r.repoId);
+                            if (!exists) {
+                                found.push({
+                                    repo: r,
+                                    deviceId: device.deviceId,
+                                    deviceLabel: device.label
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error(`Error listando repos del dispositivo ${device.deviceId}`, err);
+            }
+        }
+
+        setRemoteRepos(found);
+        setIsSearchingRemotes(false);
+    };
+
+    const handleCloneRemoteRepo = async (remoteRepoId: string, deviceId: string) => {
+        const conn = PeerService.deviceConns && PeerService.deviceConns[deviceId];
+        if (!conn || !conn.open) {
+            return showAlert("Error", "El dispositivo no está conectado.");
+        }
+
+        try {
+            const data = await PeerService.request<{
+                repo: Repository;
+                branches: Branch[];
+                objects: DriveObject[];
+                pullRequests?: PullRequest[];
+            }>(conn, 'DRIVE_CLONE_REQ', { repoId: remoteRepoId });
+
+            if (!data || !data.repo) {
+                throw new Error("Respuesta inválida del dispositivo.");
+            }
+
+            for (const obj of data.objects) {
+                await DB.saveDriveObject(obj);
+            }
+
+            for (const b of data.branches) {
+                await DB.saveBranch(b);
+            }
+
+            if (data.pullRequests) {
+                for (const pr of data.pullRequests) {
+                    await DB.savePullRequest(pr);
+                }
+            }
+
+            const clonedRepo: Repository = {
+                ...data.repo,
+                originDeviceId: deviceId
+            };
+            await DB.saveRepository(clonedRepo);
+
+            setShowCloneModal(false);
+            showAlert("Éxito", `Repositorio '${clonedRepo.name}' clonado con éxito.`);
+            await loadRepositories();
+        } catch (e: any) {
+            showAlert("Error", e.message || "Error al clonar el repositorio.");
+        }
+    };
+
+    const handlePullRemoteRepo = async () => {
+        if (!activeRepo || !activeRepo.originDeviceId) return;
+
+        const conn = PeerService.deviceConns && PeerService.deviceConns[activeRepo.originDeviceId];
+        if (!conn || !conn.open) {
+            return showAlert("Error", "El dispositivo origen no está en línea o conectado.");
+        }
+
+        showConfirm(
+            "Actualizar Repositorio (Pull)",
+            `¿Descargar y aplicar los últimos cambios desde el dispositivo de origen?`,
+            async () => {
+                try {
+                    const data = await PeerService.request<{
+                        branches: Branch[];
+                        objects: DriveObject[];
+                        pullRequests?: PullRequest[];
+                    }>(conn, 'DRIVE_PULL_REQ', { repoId: activeRepo.repoId });
+
+                    for (const obj of data.objects) {
+                        await DB.saveDriveObject(obj);
+                    }
+
+                    for (const b of data.branches) {
+                        await DB.saveBranch(b);
+                    }
+
+                    if (data.pullRequests) {
+                        for (const pr of data.pullRequests) {
+                            await DB.savePullRequest(pr);
+                        }
+                    }
+
+                    showAlert("Éxito", "Repositorio actualizado con éxito (Pull).");
+                    await loadRepoData(activeRepo, activeBranch);
+                } catch (e: any) {
+                    showAlert("Error", e.message || "Error al actualizar el repositorio.");
+                }
+            }
+        );
+    };
+
+    const handlePushRemoteRepo = async () => {
+        if (!activeRepo || !activeRepo.originDeviceId) return;
+
+        const conn = PeerService.deviceConns && PeerService.deviceConns[activeRepo.originDeviceId];
+        if (!conn || !conn.open) {
+            return showAlert("Error", "El dispositivo origen no está en línea o conectado.");
+        }
+
+        showConfirm(
+            "Enviar Cambios (Push)",
+            `¿Enviar tus commits y ramas locales al dispositivo de origen?`,
+            async () => {
+                try {
+                    const branchesList = await DB.getBranches(activeRepo.repoId);
+                    const pullRequestsList = await DB.getPullRequests(activeRepo.repoId);
+                    
+                    const objects: DriveObject[] = [];
+                    const visited = new Set<string>();
+
+                    const addObj = async (hash: string) => {
+                        if (visited.has(hash)) return;
+                        visited.add(hash);
+                        const obj = await DB.getDriveObject(hash);
+                        if (obj) {
+                            objects.push(obj);
+                            if (obj.type === 'commit') {
+                                const commit = JSON.parse(obj.content) as Commit;
+                                if (commit.rootTree) await addObj(commit.rootTree);
+                            } else if (obj.type === 'tree') {
+                                const entries = JSON.parse(obj.content) as TreeEntry[];
+                                for (const entry of entries) {
+                                    await addObj(entry.hash);
+                                }
+                            }
+                        }
+                    };
+
+                    for (const b of branchesList) {
+                        let curr = b.headCommitId;
+                        while (curr) {
+                            await addObj(curr);
+                            const commitObj = await DB.getDriveObject(curr);
+                            if (commitObj && commitObj.type === 'commit') {
+                                const commit = JSON.parse(commitObj.content) as Commit;
+                                curr = commit.parentCommitId || '';
+                            } else {
+                                break;
+                            }
+                        }
+                    }
+
+                    const response = await PeerService.request<{ success: boolean }>(conn, 'DRIVE_PUSH_REQ', {
+                        repoId: activeRepo.repoId,
+                        branches: branchesList,
+                        objects,
+                        pullRequests: pullRequestsList
+                    });
+
+                    if (response && response.success) {
+                        showAlert("Éxito", "Cambios enviados con éxito (Push).");
+                    } else {
+                        throw new Error("El dispositivo origen rechazó los cambios.");
+                    }
+                } catch (e: any) {
+                    showAlert("Error", e.message || "Error al enviar los cambios.");
+                }
+            }
+        );
+    };
+
     // Calculate diffs between committed files and workingFiles
     const getModifiedStatus = (path: string) => {
         const committed = committedFiles.find(f => f.path === path);
@@ -445,7 +770,10 @@ export const DriveView: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', maxWidth: '900px', margin: '0 auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h2 style={{ color: 'var(--primary)', margin: 0 }}>📂 bitDrive</h2>
-                    <Button variant="primary" onClick={() => setShowCreateRepo(true)}>📁 Nuevo Repositorio</Button>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <Button variant="ghost" onClick={handleSearchRemoteRepos}>📥 Clonar Repositorio</Button>
+                        <Button variant="primary" onClick={() => setShowCreateRepo(true)}>📁 Nuevo Repositorio</Button>
+                    </div>
                 </div>
 
                 <p style={{ color: 'var(--text-dim)', fontSize: '14px', textAlign: 'center' }}>
@@ -496,6 +824,16 @@ export const DriveView: React.FC = () => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                     <Button variant="ghost" className="btn-sm" onClick={() => setActiveRepo(null)}>← Volver</Button>
                     <h3 style={{ color: 'var(--text-main)', margin: 0 }}>🏛️ {activeRepo.name}</h3>
+                    {activeRepo.originDeviceId && activeRepo.originDeviceId !== (localStorage.getItem('bit_device_id') || 'local') && (
+                        <div style={{ display: 'flex', gap: '8px', marginLeft: '10px' }}>
+                            <Button variant="ghost" className="btn-sm" style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--accent-blue)', color: 'var(--accent-blue)' }} onClick={handlePullRemoteRepo}>
+                                📥 Pull
+                            </Button>
+                            <Button variant="ghost" className="btn-sm" style={{ padding: '4px 8px', fontSize: '11px', borderColor: 'var(--success)', color: 'var(--success)' }} onClick={handlePushRemoteRepo}>
+                                📤 Push
+                            </Button>
+                        </div>
+                    )}
                 </div>
                 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -647,6 +985,12 @@ export const DriveView: React.FC = () => {
                             style={{ fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', color: activeTab === 'history' ? 'var(--accent-blue)' : 'var(--text-dim)', borderBottom: activeTab === 'history' ? '2px solid var(--accent-blue)' : '2px solid transparent', paddingBottom: '6px' }}
                         >
                             📜 Historial de Commits
+                        </span>
+                        <span 
+                            onClick={() => setActiveTab('pullrequests')}
+                            style={{ fontSize: '13px', fontWeight: 'bold', cursor: 'pointer', color: activeTab === 'pullrequests' ? 'var(--accent-blue)' : 'var(--text-dim)', borderBottom: activeTab === 'pullrequests' ? '2px solid var(--accent-blue)' : '2px solid transparent', paddingBottom: '6px' }}
+                        >
+                            🔀 Pull Requests
                         </span>
                         <span 
                             onClick={() => setActiveTab('settings')}
@@ -907,6 +1251,294 @@ export const DriveView: React.FC = () => {
                             </div>
                         )}
 
+                        {activeTab === 'pullrequests' && (
+                            <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: '4px' }}>
+                                {!activePR ? (
+                                    <>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <h4 style={{ margin: 0, color: 'var(--text-main)' }}>🔀 Pull Requests</h4>
+                                            <Button 
+                                                variant="primary" 
+                                                className="btn-sm" 
+                                                onClick={() => {
+                                                    const otherBranch = branches.find(b => b.name !== 'main');
+                                                    setNewPRSource(otherBranch ? otherBranch.name : '');
+                                                    setNewPRTarget('main');
+                                                    setShowCreatePRModal(true);
+                                                }}
+                                            >
+                                                Crear Pull Request
+                                            </Button>
+                                        </div>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
+                                            {pullRequests.map(pr => (
+                                                <div 
+                                                    key={pr.prId}
+                                                    onClick={async () => {
+                                                        setActivePR(pr);
+                                                        await loadPRDiffs(pr);
+                                                    }}
+                                                    style={{ 
+                                                        padding: '15px', 
+                                                        borderRadius: '10px', 
+                                                        background: 'rgba(255,255,255,0.02)', 
+                                                        border: '1px solid var(--border)',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'center'
+                                                    }}
+                                                >
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                            <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>{pr.title}</span>
+                                                            <span style={{ 
+                                                                fontSize: '10px', 
+                                                                fontWeight: 'bold',
+                                                                padding: '2px 8px', 
+                                                                borderRadius: '12px', 
+                                                                background: pr.status === 'open' ? 'rgba(52, 211, 153, 0.1)' : (pr.status === 'merged' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(239, 68, 68, 0.1)'),
+                                                                color: pr.status === 'open' ? 'var(--success)' : (pr.status === 'merged' ? 'var(--accent-blue)' : 'var(--primary)'),
+                                                                border: `1px solid ${pr.status === 'open' ? 'rgba(52,211,153,0.3)' : (pr.status === 'merged' ? 'rgba(59,130,246,0.3)' : 'rgba(239,68,68,0.3)')}`
+                                                            }}>
+                                                                {pr.status.toUpperCase()}
+                                                            </span>
+                                                        </div>
+                                                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                                                            #{pr.prId.substring(0, 8)} • De: <strong style={{ color: 'var(--accent-blue)' }}>{pr.sourceBranch}</strong> hacia: <strong style={{ color: 'var(--accent-blue)' }}>{pr.targetBranch}</strong>
+                                                        </span>
+                                                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                                                            Creado por: {pr.author} • {new Date(pr.createdAt).toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                    <span style={{ fontSize: '18px', color: 'var(--text-dim)' }}>→</span>
+                                                </div>
+                                            ))}
+
+                                            {pullRequests.length === 0 && (
+                                                <div style={{ padding: '30px', textAlign: 'center', border: '1px dashed var(--border)', borderRadius: '10px', color: 'var(--text-dim)' }}>
+                                                    No hay pull requests en este repositorio.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                            <Button variant="ghost" className="btn-sm" onClick={() => setActivePR(null)}>
+                                                ← Volver a la lista
+                                            </Button>
+                                            <div style={{ display: 'flex', gap: '10px' }}>
+                                                {activePR.status === 'open' && (
+                                                    <>
+                                                        <Button variant="ghost" className="btn-sm" style={{ borderColor: 'var(--primary)', color: 'var(--primary)' }} onClick={() => handleClosePR(activePR)}>
+                                                            Cerrar sin Fusionar
+                                                        </Button>
+                                                        <Button variant="success" className="btn-sm" onClick={() => handleMergePR(activePR)}>
+                                                            ✔ Fusionar (Merge)
+                                                        </Button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <Card style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.01)' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <div>
+                                                    <h3 style={{ margin: '0 0 4px 0', color: 'var(--text-main)' }}>{activePR.title}</h3>
+                                                    <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                                                        ID: {activePR.prId}
+                                                    </span>
+                                                </div>
+                                                <span style={{ 
+                                                    fontSize: '11px', 
+                                                    fontWeight: 'bold',
+                                                    padding: '3px 10px', 
+                                                    borderRadius: '12px', 
+                                                    background: activePR.status === 'open' ? 'rgba(52, 211, 153, 0.1)' : (activePR.status === 'merged' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(239, 68, 68, 0.1)'),
+                                                    color: activePR.status === 'open' ? 'var(--success)' : (activePR.status === 'merged' ? 'var(--accent-blue)' : 'var(--primary)'),
+                                                    border: `1px solid ${activePR.status === 'open' ? 'rgba(52,211,153,0.3)' : (activePR.status === 'merged' ? 'rgba(59,130,246,0.3)' : 'rgba(239,68,68,0.3)')}`
+                                                }}>
+                                                    {activePR.status.toUpperCase()}
+                                                </span>
+                                            </div>
+
+                                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center', background: 'rgba(0,0,0,0.15)', padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '13px' }}>
+                                                <span style={{ color: 'var(--text-dim)' }}>Fusión:</span>
+                                                <span style={{ fontFamily: 'monospace', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>{activePR.sourceBranch}</span>
+                                                <span style={{ color: 'var(--text-dim)' }}>hacia</span>
+                                                <span style={{ fontFamily: 'monospace', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>{activePR.targetBranch}</span>
+                                            </div>
+
+                                            {activePR.description && (
+                                                <div style={{ fontSize: '13px', color: 'var(--text-main)', borderTop: '1px solid var(--border)', paddingTop: '12px', whiteSpace: 'pre-wrap' }}>
+                                                    <strong>Descripción:</strong><br />
+                                                    {activePR.description}
+                                                </div>
+                                            )}
+
+                                            <div style={{ fontSize: '11px', color: 'var(--text-dim)', borderTop: '1px solid var(--border)', paddingTop: '10px', display: 'flex', justifyContent: 'space-between' }}>
+                                                <span>Autor: {activePR.author}</span>
+                                                <span>Creado: {new Date(activePR.createdAt).toLocaleString()}</span>
+                                                {activePR.mergedAt && <span>Fusionado: {new Date(activePR.mergedAt).toLocaleString()}</span>}
+                                                {activePR.closedAt && <span>Cerrado: {new Date(activePR.closedAt).toLocaleString()}</span>}
+                                            </div>
+                                        </Card>
+
+                                        {/* PR Comments Card */}
+                                        <Card style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.01)' }}>
+                                            <h4 style={{ margin: '0 0 4px 0', fontSize: '14px', color: 'var(--text-main)' }}>
+                                                💬 Comentarios ({activePR.comments?.length || 0})
+                                            </h4>
+                                            
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                                                {activePR.comments && activePR.comments.length > 0 ? (
+                                                    activePR.comments.map(c => (
+                                                        <div 
+                                                            key={c.commentId} 
+                                                            style={{ 
+                                                                padding: '10px', 
+                                                                borderRadius: '8px', 
+                                                                background: 'rgba(0,0,0,0.15)', 
+                                                                border: '1px solid var(--border)', 
+                                                                display: 'flex', 
+                                                                flexDirection: 'column', 
+                                                                gap: '4px' 
+                                                            }}
+                                                        >
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--accent-blue)' }}>
+                                                                <span style={{ fontWeight: 'bold' }}>{c.author}</span>
+                                                                <span style={{ color: 'var(--text-dim)' }}>{new Date(c.timestamp).toLocaleString()}</span>
+                                                            </div>
+                                                            <span style={{ fontSize: '12px', color: 'var(--text-main)', whiteSpace: 'pre-wrap' }}>
+                                                                {c.text}
+                                                            </span>
+                                                        </div>
+                                                    ))
+                                                ) : (
+                                                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', fontStyle: 'italic', margin: 0 }}>
+                                                        No hay comentarios en este pull request.
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            {activePR.status === 'open' ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+                                                    <textarea 
+                                                        placeholder="Escribe un comentario..." 
+                                                        value={prCommentText} 
+                                                        onChange={(e) => setPrCommentText(e.target.value)} 
+                                                        style={{ width: '100%', height: '60px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px', color: 'var(--text-main)', fontSize: '12px', resize: 'none', outline: 'none' }}
+                                                    />
+                                                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                                                        <Button 
+                                                            variant="primary" 
+                                                            className="btn-sm" 
+                                                            onClick={handleAddPRComment} 
+                                                            disabled={!prCommentText.trim()}
+                                                            style={{ padding: '6px 12px', fontSize: '12px' }}
+                                                        >
+                                                            Comentar
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div style={{ borderTop: '1px solid var(--border)', paddingTop: '10px', fontSize: '11px', color: 'var(--text-dim)', fontStyle: 'italic', textAlign: 'center' }}>
+                                                    🔒 Este pull request está {activePR.status === 'merged' ? 'fusionado' : 'cerrado'}. No se pueden añadir nuevos comentarios.
+                                                </div>
+                                            )}
+                                        </Card>
+
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <h4 style={{ margin: '10px 0 5px 0', fontSize: '14px', color: 'var(--text-main)' }}>
+                                                📁 Archivos cambiados ({prDiffFiles.length})
+                                            </h4>
+                                            
+                                            {prDiffFiles.map(file => {
+                                                const isSelected = selectedDiffFile === file.path;
+                                                return (
+                                                    <div key={file.path} style={{ display: 'flex', flexDirection: 'column', border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden' }}>
+                                                        <div 
+                                                            onClick={() => setSelectedDiffFile(isSelected ? null : file.path)}
+                                                            style={{ 
+                                                                display: 'flex', 
+                                                                justifyContent: 'space-between', 
+                                                                alignItems: 'center', 
+                                                                padding: '10px 12px', 
+                                                                background: 'rgba(255,255,255,0.01)', 
+                                                                cursor: 'pointer',
+                                                                fontSize: '13px'
+                                                            }}
+                                                        >
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                <span style={{ 
+                                                                    fontSize: '11px', 
+                                                                    fontWeight: 'bold', 
+                                                                    padding: '2px 6px', 
+                                                                    borderRadius: '4px',
+                                                                    background: file.status === 'added' ? 'rgba(52,211,153,0.1)' : (file.status === 'modified' ? 'rgba(59,130,246,0.1)' : 'rgba(239,68,68,0.1)'),
+                                                                    color: file.status === 'added' ? 'var(--success)' : (file.status === 'modified' ? 'var(--accent-blue)' : 'var(--primary)')
+                                                                }}>
+                                                                    {file.status}
+                                                                </span>
+                                                                <span style={{ fontWeight: 'bold' }}>{file.path}</span>
+                                                            </div>
+                                                            <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>
+                                                                {isSelected ? '🔼 Ocultar Diff' : '🔽 Mostrar Diff'}
+                                                            </span>
+                                                        </div>
+
+                                                        {isSelected && (
+                                                            <div style={{ 
+                                                                borderTop: '1px solid var(--border)', 
+                                                                padding: '12px', 
+                                                                background: 'rgba(0,0,0,0.2)', 
+                                                                fontFamily: '"Fira Code", Courier, monospace', 
+                                                                fontSize: '12px', 
+                                                                overflowX: 'auto',
+                                                                maxHeight: '300px',
+                                                                overflowY: 'auto'
+                                                            }}>
+                                                                {file.status === 'added' && (
+                                                                    <pre style={{ margin: 0, color: 'var(--success)' }}>
+                                                                        {file.sourceContent || '(Archivo vacío)'}
+                                                                    </pre>
+                                                                )}
+                                                                {file.status === 'deleted' && (
+                                                                    <pre style={{ margin: 0, color: 'var(--primary)', textDecoration: 'line-through' }}>
+                                                                        {file.targetContent || '(Archivo vacío)'}
+                                                                    </pre>
+                                                                )}
+                                                                {file.status === 'modified' && (
+                                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                                        <div style={{ color: 'var(--primary)' }}>
+                                                                            <strong>--- Original ({activePR.targetBranch})</strong>
+                                                                            <pre style={{ margin: '5px 0 0 0', opacity: 0.7 }}>{file.targetContent}</pre>
+                                                                        </div>
+                                                                        <div style={{ color: 'var(--success)', borderTop: '1px dashed var(--border)', paddingTop: '10px' }}>
+                                                                            <strong>+++ Modificado ({activePR.sourceBranch})</strong>
+                                                                            <pre style={{ margin: '5px 0 0 0' }}>{file.sourceContent}</pre>
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+
+                                            {prDiffFiles.length === 0 && (
+                                                <div style={{ padding: '15px', fontStyle: 'italic', color: 'var(--text-dim)', fontSize: '12px', textAlign: 'center' }}>
+                                                    No hay diferencias de archivos entre '{activePR.sourceBranch}' y '{activePR.targetBranch}'.
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                     </div>
                 </Card>
 
@@ -938,6 +1570,122 @@ export const DriveView: React.FC = () => {
                 <div style={{ display: 'flex', gap: '10px', marginTop: '16px' }}>
                     <Button variant="ghost" style={{ flex: '1' }} onClick={() => setShowRenameModal(false)}>Cancelar</Button>
                     <Button style={{ flex: '1' }} onClick={handleRenameFileSubmit}>Renombrar</Button>
+                </div>
+            </Modal>
+
+            {/* Create PR Modal */}
+            <Modal active={showCreatePRModal} title="Crear Pull Request" onClose={() => setShowCreatePRModal(false)}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div>
+                        <label style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>Título</label>
+                        <Input 
+                            placeholder="Ej. Añadir documentación de bitOS" 
+                            value={newPRTitle} 
+                            onChange={(e) => setNewPRTitle(e.target.value)} 
+                        />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>Descripción</label>
+                        <textarea 
+                            placeholder="Describe los cambios que realizaste en esta rama..." 
+                            value={newPRDescription} 
+                            onChange={(e) => setNewPRDescription(e.target.value)} 
+                            style={{ width: '100%', height: '80px', background: 'var(--input-bg)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px', color: 'var(--text-main)', fontSize: '13px', resize: 'none', outline: 'none' }}
+                        />
+                    </div>
+                    <div style={{ display: 'flex', gap: '15px' }}>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>Rama Origen (Source)</label>
+                            <select 
+                                value={newPRSource} 
+                                onChange={(e) => setNewPRSource(e.target.value)}
+                                style={{ width: '100%', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
+                            >
+                                <option value="">Selecciona origen...</option>
+                                {branches.map(b => (
+                                    <option key={b.name} value={b.name}>🌿 {b.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                            <label style={{ fontSize: '12px', color: 'var(--text-dim)', display: 'block', marginBottom: '4px' }}>Rama Destino (Target)</label>
+                            <select 
+                                value={newPRTarget} 
+                                onChange={(e) => setNewPRTarget(e.target.value)}
+                                style={{ width: '100%', background: 'var(--input-bg)', color: 'var(--text-main)', border: '1px solid var(--border)', borderRadius: '6px', padding: '8px 10px', fontSize: '13px', outline: 'none', cursor: 'pointer' }}
+                            >
+                                {branches.map(b => (
+                                    <option key={b.name} value={b.name}>🌿 {b.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                        <Button variant="ghost" style={{ flex: '1' }} onClick={() => setShowCreatePRModal(false)}>Cancelar</Button>
+                        <Button style={{ flex: '1' }} onClick={handleCreatePR} disabled={!newPRTitle.trim() || !newPRSource || !newPRTarget || newPRSource === newPRTarget}>Crear Pull Request</Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Clone Repository Modal */}
+            <Modal active={showCloneModal} title="Clonar Repositorio" onClose={() => setShowCloneModal(false)}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', minWidth: '320px' }}>
+                    <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: 0 }}>
+                        Busca repositorios alojados en tus otros dispositivos bitDevice que estén en línea y clónalos localmente.
+                    </p>
+
+                    {isSearchingRemotes ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '20px', gap: '10px' }}>
+                            <span style={{ fontSize: '24px' }}>🔄</span>
+                            <span style={{ fontSize: '13px', color: 'var(--text-dim)' }}>Consultando dispositivos conectados...</span>
+                        </div>
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
+                            {remoteRepos.map(item => (
+                                <div 
+                                    key={item.repo.repoId} 
+                                    style={{ 
+                                        padding: '12px', 
+                                        borderRadius: '8px', 
+                                        background: 'rgba(255,255,255,0.02)', 
+                                        border: '1px solid var(--border)', 
+                                        display: 'flex', 
+                                        justifyContent: 'space-between', 
+                                        alignItems: 'center' 
+                                    }}
+                                >
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                        <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>🏛️ {item.repo.name}</span>
+                                        <span style={{ fontSize: '11px', color: 'var(--text-dim)' }}>En: {item.deviceLabel}</span>
+                                        <span style={{ fontSize: '10px', fontFamily: 'monospace', color: 'var(--text-dim)' }}>ID: {item.repo.repoId.substring(0, 8)}...</span>
+                                    </div>
+                                    <Button 
+                                        variant="success" 
+                                        className="btn-sm" 
+                                        onClick={() => handleCloneRemoteRepo(item.repo.repoId, item.deviceId)}
+                                        style={{ padding: '6px 12px', fontSize: '12px' }}
+                                    >
+                                        Clonar
+                                    </Button>
+                                </div>
+                            ))}
+
+                            {remoteRepos.length === 0 && (
+                                <div style={{ padding: '20px', textAlign: 'center', border: '1px dashed var(--border)', borderRadius: '8px', color: 'var(--text-dim)', fontSize: '12px' }}>
+                                    No se encontraron repositorios clonables. Asegúrate de tener otros dispositivos encendidos, vinculados y en línea en bitDevices.
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', borderTop: '1px solid var(--border)', paddingTop: '10px' }}>
+                        <Button variant="ghost" style={{ flex: 1 }} onClick={() => setShowCloneModal(false)}>
+                            Cerrar
+                        </Button>
+                        <Button variant="primary" style={{ flex: 1 }} onClick={handleSearchRemoteRepos} disabled={isSearchingRemotes}>
+                            🔄 Recargar
+                        </Button>
+                    </div>
                 </div>
             </Modal>
 
