@@ -11,7 +11,7 @@ export const TermsPage: React.FC = () => {
             <Card className="fade-in" style={{ width: '600px', maxHeight: '90vh', padding: '40px', overflowY: 'auto' }}>
                 <h1 style={{ color: 'var(--primary)', fontSize: '24px', marginBottom: '20px' }}>Términos y Condiciones</h1>
                 <div style={{ color: 'var(--text-main)', fontSize: '14px', lineHeight: '1.6', marginBottom: '20px' }}>
-                    <p style={{ marginBottom: '15px' }}>BitChat es una terminal de mensajería soberana y privada. Al utilizar esta aplicación, aceptas los siguientes términos:</p>
+                    <p style={{ marginBottom: '15px' }}>bitOS es una terminal soberana y privada. Al utilizar esta aplicación, aceptas los siguientes términos:</p>
                     <h2 style={{ fontSize: '18px', color: 'var(--accent-blue)', marginBottom: '10px' }}>Licencia MIT</h2>
                     <pre style={{ background: 'var(--input-bg)', padding: '15px', borderRadius: '8px', border: '1px solid var(--border)', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '12px', marginBottom: '15px' }}>
 {`Copyright (c) 2026 Calimpio
@@ -35,9 +35,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.`}
                     </pre>
                     <h2 style={{ fontSize: '18px', color: 'var(--accent-blue)', marginBottom: '10px' }}>Uso de la Aplicación</h2>
-                    <p style={{ marginBottom: '10px' }}>BitChat es una herramienta de comunicación punto a punto (P2P). No almacenamos tus datos en servidores centrales. Eres el único responsable de la seguridad de tus credenciales y de la gestión de tus datos locales.</p>
+                    <p style={{ marginBottom: '10px' }}>bitOS es una herramienta de comunicación punto a punto (P2P). No almacenamos tus datos en servidores centrales. Eres el único responsable de la seguridad de tus credenciales y de la gestión de tus datos locales.</p>
                     <h2 style={{ fontSize: '18px', color: 'var(--accent-blue)', marginBottom: '10px' }}>Privacidad</h2>
-                    <p style={{ marginBottom: '10px' }}>Tus mensajes y contactos residen exclusivamente en tu dispositivo. BitChat utiliza WebRTC para establecer conexiones directas entre pares.</p>
+                    <p style={{ marginBottom: '10px' }}>Tus mensajes y contactos residen exclusivamente en tu dispositivo. bitOS utiliza WebRTC para establecer conexiones directas entre pares.</p>
                 </div>
                 <Button 
                     variant="ghost" 

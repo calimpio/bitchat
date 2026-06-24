@@ -1,6 +1,6 @@
 import { Peer, DataConnection } from 'peerjs';
 import { DB } from './db.ts';
-import { BitChatAuth, generarCuartaCredencial, generarQuintaId, hashString } from './auth.ts';
+import { BitMsgAuth, generarCuartaCredencial, generarQuintaId, hashString } from './auth.ts';
 import { IPaqueteData, IPaqueteSyncData, ContactMap, Message, Credentials } from '../models/types.ts';
 import { CryptoService } from './crypto.ts';
 import { VaultService } from './vault.ts';
@@ -102,7 +102,7 @@ export const PeerService: IPeerService = {
                 const timeout = setTimeout(() => { if (!foundExisting) { probePeer.destroy(); resolve(true); } }, 5000);
                 conn.on('open', async () => {
                     foundExisting = true; clearTimeout(timeout);
-                    const localCreds = await BitChatAuth.obtenerMisCredenciales();
+                    const localCreds = await BitMsgAuth.obtenerMisCredenciales();
                     conn.send({
                         tipo: 'IDENTITY_PROBE',
                         deIdPublico: idPublico,
@@ -125,7 +125,7 @@ export const PeerService: IPeerService = {
         if (this.syncInterval) clearInterval(this.syncInterval);
         this.syncInterval = setInterval(async () => {
             if (!useStore.getState().aesKey) return; // Si la terminal está bloqueada, no hacer nada
-            const misCreds = await BitChatAuth.obtenerMisCredenciales();
+            const misCreds = await BitMsgAuth.obtenerMisCredenciales();
             if (!misCreds) return;
             const pending = await DB.getPendingMessages();
             const uniqueTargets = [...new Set(pending.map(m => m.chatId))];
@@ -142,7 +142,7 @@ export const PeerService: IPeerService = {
         console.log(`Intentando conectar a dispositivo personal: ${targetId}`);
         const conn = this.peer.connect(targetId, { reliable: true });
         conn.on('open', async () => {
-            const misCreds = await BitChatAuth.obtenerMisCredenciales();
+            const misCreds = await BitMsgAuth.obtenerMisCredenciales();
             if (!misCreds) return;
             const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
             conn.send({
@@ -162,7 +162,7 @@ export const PeerService: IPeerService = {
 
     async buscarDispositivos(forceAll: boolean = false): Promise<void> {
         if (!useStore.getState().aesKey) return; // Si la terminal está bloqueada, no hacer nada
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         if (!misCreds) return;
         console.log('Iniciando búsqueda de terminales autorizadas...');
         
@@ -174,7 +174,7 @@ export const PeerService: IPeerService = {
             this.conectarADispositivoPersonal(masterPeerId);
         }
 
-        const contactos = await BitChatAuth.obtenerContactos();
+        const contactos = await BitMsgAuth.obtenerContactos();
         const authorizedDeviceIds = new Set<string>();
         for (const id in contactos) {
             contactos[id].syncAllowedDevices?.forEach(dId => authorizedDeviceIds.add(dId));
@@ -194,14 +194,14 @@ export const PeerService: IPeerService = {
 
         const hashedId = await hashString(idPublicoAmigo);
         const conn = this.peer.connect(`bc-v2-${hashedId.substring(0, 24)}`, { reliable: true });
-        const contactos = await BitChatAuth.obtenerContactos();
+        const contactos = await BitMsgAuth.obtenerContactos();
         if (!contactos[idPublicoAmigo]) {
             useStore.getState().solicitudesEnviadasPendientes.add(idPublicoAmigo);
             this.conexionesP2PDirectas[idPublicoAmigo] = { status: 'PENDING', conn };
         }
 
         conn.on('open', async () => {
-            const misCreds = await BitChatAuth.obtenerMisCredenciales();
+            const misCreds = await BitMsgAuth.obtenerMisCredenciales();
             if (!misCreds) return;
             if (contactos[idPublicoAmigo]) {
                 if (this.conexionesP2PDirectas[idPublicoAmigo]?.status !== 'SECURE') {
@@ -220,7 +220,7 @@ export const PeerService: IPeerService = {
 
     async _getSharedKey(idAmigo: string): Promise<CryptoKey | null> {
         if (this.sharedKeys[idAmigo]) return this.sharedKeys[idAmigo];
-        const contactos = await BitChatAuth.obtenerContactos();
+        const contactos = await BitMsgAuth.obtenerContactos();
         const contact = contactos[idAmigo];
         if (!contact) return null;
         if (contact.sharedSecret) {
@@ -230,7 +230,7 @@ export const PeerService: IPeerService = {
                 return sharedKey;
             } catch (e) { console.error("[CRYPTO] Error importando secreto:", e); }
         }
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         if (!misCreds || !contact.publicKey || !useStore.getState().aesKey) return null;
         try {
             const privKeyJWKJson = await CryptoService.decrypt(useStore.getState().aesKey!, misCreds.encryptedPrivateKey!, misCreds.privateKeyIv!);
@@ -238,7 +238,7 @@ export const PeerService: IPeerService = {
             const sharedKey = await CryptoService.deriveSharedSecret(myPrivKey, await CryptoService.importPublicECDHKey(contact.publicKey!));
             this.sharedKeys[idAmigo] = sharedKey;
             const exportedSecret = await CryptoService.exportAESKey(sharedKey);
-            await BitChatAuth.guardarContacto(idAmigo, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, contact.syncAllowedDevices, exportedSecret);
+            await BitMsgAuth.guardarContacto(idAmigo, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, contact.syncAllowedDevices, exportedSecret);
             return sharedKey;
         } catch (e) { return null; }
     },
@@ -281,7 +281,7 @@ export const PeerService: IPeerService = {
 
     async _alertarContactosDeIntentoDeSecuestro(miIdComprometido: string): Promise<void> {
         if (!this.peer) return;
-        const contactos = await BitChatAuth.obtenerContactos();
+        const contactos = await BitMsgAuth.obtenerContactos();
         for (const idAmigo in contactos) {
             const hashedId = await hashString(idAmigo);
             const conn = this.peer.connect(`bc-v2-${hashedId.substring(0, 24)}`);
@@ -290,17 +290,17 @@ export const PeerService: IPeerService = {
     },
 
     async _establecerCanalSeguro(idAmigo: string, miCuarta: string, suCuarta: string, conn?: DataConnection): Promise<void> {
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         if (!misCreds) return;
         delete this.sharedKeys[idAmigo];
         const quintaId = await generarQuintaId(miCuarta, suCuarta);
-        this.conexionesP2PDirectas[idAmigo] = { channelId: `bitchat-safe-${[misCreds.idPublico, idAmigo].sort().join('')}-${quintaId}`, status: 'SECURE', conn: conn || this.conexionesP2PDirectas[idAmigo]?.conn };
+        this.conexionesP2PDirectas[idAmigo] = { channelId: `bitmsg-safe-${[misCreds.idPublico, idAmigo].sort().join('')}-${quintaId}`, status: 'SECURE', conn: conn || this.conexionesP2PDirectas[idAmigo]?.conn };
         if (this.onRefresh) this.onRefresh();
     },
 
     async _enviarPendientes(chatId: string, conn: DataConnection): Promise<void> {
         if (!conn.open) return;
-        const misCreds = await BitChatAuth.obtenerMisCredenciales(), info = this.conexionesP2PDirectas[chatId], sharedKey = await this._getSharedKey(chatId);
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales(), info = this.conexionesP2PDirectas[chatId], sharedKey = await this._getSharedKey(chatId);
         if (!misCreds || !info || !sharedKey) return;
         const pending = await DB.getPendingMessages();
         for (const m of pending) {
@@ -326,7 +326,7 @@ export const PeerService: IPeerService = {
         const hashedId = await hashString(idPublicoAmigo);
         const conn = this.peer.connect(`bc-v2-${hashedId.substring(0, 24)}`);
         conn.on('open', async () => {
-            const misCreds = await BitChatAuth.obtenerMisCredenciales();
+            const misCreds = await BitMsgAuth.obtenerMisCredenciales();
             if (misCreds) conn.send({ tipo: 'CONNECTION_REJECTED', deIdPublico: misCreds.idPublico });
             setTimeout(() => conn.close(), 1000);
         });
@@ -335,7 +335,7 @@ export const PeerService: IPeerService = {
     },
 
     async enviarMensaje(idPublicoAmigo: string, texto: string): Promise<void> {
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         if (!misCreds) return;
         const sharedKey = await this._getSharedKey(idPublicoAmigo), uniqueId = crypto.randomUUID();
         const chatMsg: Message = { msgId: uniqueId, chatId: idPublicoAmigo, de: misCreds.idPublico, msg: texto, time: Date.now(), status: 'saved', secure: true };
@@ -370,7 +370,7 @@ export const PeerService: IPeerService = {
     },
 
     async iniciarSincronizacion(password: string): Promise<boolean> {
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         if (!misCreds) return false;
         const hashedId = await hashString(misCreds.idPublico);
         const targetAuthId = `bc-v2-${hashedId.substring(0, 24)}`;
@@ -396,7 +396,7 @@ export const PeerService: IPeerService = {
                             devicesList = decrypted.devices || [];
                         }
                         for (const id in contactos) {
-                            await BitChatAuth.guardarContacto(id, contactos[id].tokenCuartaCredencial, contactos[id].insecure, contactos[id].publicKey, contactos[id].syncAllowedDevices, contactos[id].sharedSecret);
+                            await BitMsgAuth.guardarContacto(id, contactos[id].tokenCuartaCredencial, contactos[id].insecure, contactos[id].publicKey, contactos[id].syncAllowedDevices, contactos[id].sharedSecret);
                             delete this.sharedKeys[id];
                         }
                         await DB.importMessages(mensajes.filter(m => m.msgId || m.time));
@@ -430,9 +430,9 @@ export const PeerService: IPeerService = {
     },
 
     async _replicateMessage(msg: Message): Promise<void> {
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         if (!misCreds || !misCreds.publicKey || !this.deviceConns) return;
-        const contactos = await BitChatAuth.obtenerContactos();
+        const contactos = await BitMsgAuth.obtenerContactos();
         const contact = contactos[msg.chatId];
         
         const allDevices = await DB.getDevices();
@@ -465,9 +465,9 @@ export const PeerService: IPeerService = {
     },
 
     async _replicateContact(idPublico: string): Promise<void> {
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         if (!misCreds || !misCreds.publicKey || !this.deviceConns) return;
-        const contactos = await BitChatAuth.obtenerContactos();
+        const contactos = await BitMsgAuth.obtenerContactos();
         const contact = contactos[idPublico];
         if (!contact) return;
         const payload = { mensajes: [], contactos: { [idPublico]: contact } }, allDevices = await DB.getDevices();
@@ -481,7 +481,7 @@ export const PeerService: IPeerService = {
     },
 
     async syncChat(chatId: string): Promise<void> {
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         if (!misCreds) return;
         const miCuarta = await generarCuartaCredencial(misCreds.idPublico, misCreds.idPrivado, useStore.getState().masterPassword);
         const chatMsgs = await DB.getChatMessages(chatId);
@@ -501,7 +501,7 @@ export const PeerService: IPeerService = {
 
 
     async request<T>(conn: DataConnection, tipo: string, payload: any): Promise<T> {
-        const reqId = crypto.randomUUID(), misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const reqId = crypto.randomUUID(), misCreds = await BitMsgAuth.obtenerMisCredenciales();
         return new Promise((resolve, reject) => {
             if (!conn.open) return reject(new Error('Conexión cerrada'));
             const timeout = setTimeout(() => {
@@ -513,7 +513,7 @@ export const PeerService: IPeerService = {
     },
 
     async response(conn: DataConnection, reqId: string, tipo: string, payload: any): Promise<void> {
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         if (conn.open) {
             conn.send({
                 tipo,

@@ -1,10 +1,10 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.6.0.schema.json
 
-PackageIdentifier: Calimpio.BitChat
+PackageIdentifier: Calimpio.bitOS
 PackageVersion: 1.0.0
 PackageLocale: en-US
 Publisher: Calimpio
-PackageName: BitChat
+PackageName: bitOS
 PackageUrl: https://github.com/calimpio/bitchat
 License: MIT
 ShortDescription: Sovereign Cryptographic P2P Terminal.

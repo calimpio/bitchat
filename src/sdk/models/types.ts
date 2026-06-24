@@ -270,7 +270,7 @@ export interface Device {
 
 export interface AppState {
     pantalla: 'AUTH' | 'AUTH_LOGIN' | 'DASHBOARD' | 'TERMS';
-    activeApp: 'bitChat' | 'bitDrive' | 'bitDevices' | 'Settings' | 'ChatSettings';
+    activeApp: 'bitMsg' | 'bitDrive' | 'bitDevices' | 'Settings' | 'ChatSettings';
     error: string;
     chatConIdPublico: string | null;
     historiales: Record<string, Message[]>;

@@ -1,6 +1,6 @@
 import { CryptoService } from './crypto.ts';
 import { useStore } from '../../store/useStore.ts';
-import { BitChatAuth } from './auth.ts';
+import { BitMsgAuth } from './auth.ts';
 import { EncryptedVaultObject } from '../models/vault.ts';
 import { IVaultService } from './interfaces/IVaultService.ts';
 
@@ -43,7 +43,7 @@ export const VaultService: IVaultService = {
      * This allows the same owner (or a friend) to decrypt it with their private key.
      */
     async encryptForE2EE<T = unknown>(label: string, content: T, targetPublicKeyJWK: JsonWebKey): Promise<EncryptedVaultObject> {
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         const { aesKey } = useStore.getState();
         if (!misCreds || !aesKey) throw new Error("Terminal locked or identity missing.");
 
@@ -77,7 +77,7 @@ export const VaultService: IVaultService = {
      * Decrypts an object received via E2EE using my local private key.
      */
     async decryptFromE2EE<T = unknown>(vaultObj: EncryptedVaultObject): Promise<T> {
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         const { aesKey } = useStore.getState();
         if (!misCreds || !aesKey || !vaultObj.publicKey) throw new Error("Missing credentials or sender public key.");
 

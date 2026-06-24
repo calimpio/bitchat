@@ -1,5 +1,5 @@
 import { DB } from './db.ts';
-import { BitChatAuth } from './auth.ts';
+import { BitMsgAuth } from './auth.ts';
 import { Repository, Branch, Commit, DriveObject, TreeEntry, PullRequest, PRComment } from '../models/drive.ts';
 import { IDriveService } from './interfaces/IDriveService.ts';
 
@@ -34,7 +34,7 @@ export const DriveService: IDriveService = {
         });
 
         // 2. Create initial commit pointing to empty tree
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         const autor = misCreds?.idPublico || 'local-owner';
         
         const commitData = {
@@ -187,7 +187,7 @@ export const DriveService: IDriveService = {
         };
 
         const rootTreeHash = await writeTreeObjects(rootDir);
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         const autor = misCreds?.idPublico || 'local-owner';
         const now = Date.now();
 
@@ -298,7 +298,7 @@ export const DriveService: IDriveService = {
         const target = await DB.getBranch(repoId, targetBranch);
         if (!target) throw new Error(`Rama de destino ${targetBranch} no encontrada.`);
 
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         const author = misCreds?.idPublico || 'local-owner';
         const now = Date.now();
 
@@ -366,7 +366,7 @@ export const DriveService: IDriveService = {
         if (!pr) throw new Error(`Pull request ${prId} no encontrado.`);
         if (pr.status !== 'open') throw new Error("No se puede comentar en un Pull Request cerrado o fusionado.");
 
-        const misCreds = await BitChatAuth.obtenerMisCredenciales();
+        const misCreds = await BitMsgAuth.obtenerMisCredenciales();
         const author = misCreds?.idPublico || 'local-owner';
         const now = Date.now();
 

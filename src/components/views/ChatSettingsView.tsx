@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore.ts';
-import { DB, BitChatAuth, PeerService } from '../../sdk/index.ts';
+import { DB, BitMsgAuth, PeerService } from '../../sdk/index.ts';
 import { Card } from '../ui/Card.tsx';
 import { Button } from '../ui/Button.tsx';
 import { Device, ContactMap } from '../../sdk/models/types.ts';
@@ -12,7 +12,7 @@ export const ChatSettingsView: React.FC = () => {
 
     const refreshData = async () => {
         const storedDevices = await DB.getDevices();
-        const contacts = await BitChatAuth.obtenerContactos();
+        const contacts = await BitMsgAuth.obtenerContactos();
         setDevices(storedDevices);
         setAllContactos(contacts);
     };
@@ -52,13 +52,13 @@ export const ChatSettingsView: React.FC = () => {
             if (isFullyAllowed) {
                 // Revocar todo
                 const newAllowed = currentAllowed.filter(d => d !== deviceId);
-                await BitChatAuth.guardarContacto(id, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, newAllowed, contact.sharedSecret);
+                await BitMsgAuth.guardarContacto(id, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, newAllowed, contact.sharedSecret);
                 PeerService._replicateContact(id);
             } else {
                 // Autorizar todo
                 if (!currentAllowed.includes(deviceId)) {
                     const newAllowed = [...currentAllowed, deviceId];
-                    await BitChatAuth.guardarContacto(id, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, newAllowed, contact.sharedSecret);
+                    await BitMsgAuth.guardarContacto(id, contact.tokenCuartaCredencial, contact.insecure, contact.publicKey, newAllowed, contact.sharedSecret);
                     PeerService._replicateContact(id);
                 }
             }
@@ -70,8 +70,8 @@ export const ChatSettingsView: React.FC = () => {
     return (
         <div className="chat-settings-container" style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '600px', margin: '0 auto', width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <Button variant="ghost" onClick={() => useStore.setState({ activeApp: 'bitChat' })}>←</Button>
-                <h2 style={{ color: 'var(--primary)', margin: 0 }}>Configuración de bitChat</h2>
+                <Button variant="ghost" onClick={() => useStore.setState({ activeApp: 'bitMsg' })}>←</Button>
+                <h2 style={{ color: 'var(--primary)', margin: 0 }}>Configuración de bitMsg</h2>
             </div>
 
             <Card style={{ padding: '20px' }}>
@@ -137,7 +137,7 @@ export const ChatSettingsView: React.FC = () => {
             <Card style={{ padding: '20px', border: '1px solid var(--primary)', background: 'rgba(255, 69, 58, 0.05)' }}>
                 <h3 style={{ color: 'var(--primary)', fontSize: '16px', marginBottom: '10px' }}>Privacidad y Datos</h3>
                 <p style={{ fontSize: '13px', color: 'var(--text-dim)', marginBottom: '15px' }}>
-                    Borrar el historial local de bitChat no afectará a tus otros dispositivos sincronizados.
+                    Borrar el historial local de bitMsg no afectará a tus otros dispositivos sincronizados.
                 </p>
                 <Button variant="primary" style={{ width: '100%' }} onClick={async () => {
                     if (confirm("¿Seguro que quieres borrar TODOS los mensajes de esta terminal? Esta acción no se puede deshacer.")) {
@@ -146,7 +146,7 @@ export const ChatSettingsView: React.FC = () => {
                             await DB.deleteChat(id);
                         }
                         alert("Historial local eliminado.");
-                        useStore.setState({ activeApp: 'bitChat' });
+                        useStore.setState({ activeApp: 'bitMsg' });
                     }
                 }}>Borrar todo el historial local</Button>
             </Card>

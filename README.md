@@ -1,87 +1,138 @@
-# BitChat - Sovereign Cryptographic Terminal
+# bitOS - Sistema Operativo Criptográfico Soberano y Local-First
 
-Terminal de mensajería **soberana y privada** que utiliza criptografía SHA-256 y redes P2P directas. BitChat no utiliza servidores centrales; toda la inteligencia y los datos residen exclusivamente en tu terminal.
+**bitOS** es una plataforma y entorno de ejecución local-first, privado y soberano. Utiliza criptografía de grado militar (SHA-256, ECDH P-384, AES-GCM) y redes punto a punto (P2P directas mediante WebRTC) para garantizar la total propiedad de la identidad, los datos y las comunicaciones. **Sin servidores centrales; toda la inteligencia y los datos residen exclusivamente en tus terminales.**
 
-Esta versión ha sido modernizada a una arquitectura **TypeScript Local-First** con un pipeline de automatización para escritorio.
+Esta versión consolida el ecosistema en un entorno TypeScript Local-First modular y automatizado con soporte nativo para escritorio.
 
-## 🚀 Características Principales
+---
 
-### 1. Soberanía de Identidad
-- **Sin Servidores**: No hay base de datos central. Tu identidad es un par de claves criptográficas generadas localmente.
-- **Identidad Numérica**: Los usuarios se identifican únicamente por su ID Público, eliminando metadatos innecesarios.
-- **Protección Anti-Secuestro**: Sistema de validación en red que impide que un tercero reclame tu ID Público.
+## 🚀 Arquitectura del Ecosistema
 
-### 2. Privacidad Extrema
-- **Handshake Criptográfico**: Intercambio automático de credenciales para establecer canales seguros únicos.
-- **Privacidad de Nickname**: Los nicknames son locales y privados.
-- **Control Total**: Borrado permanente de datos locales (Wipe) y eliminación de chats.
+El ecosistema de **bitOS** está compuesto por módulos especializados que interactúan a través de un SDK unificado:
 
-### 3. Sincronización P2P
-- **Sincronización Segura**: Transfiere contactos y mensajes entre tus propios dispositivos mediante desafíos criptográficos directos.
+```
+                  ┌──────────────────────────────────────────────┐
+                  │                 bitOS Core                   │
+                  │   (Vault, RAM Purge, Auto-Lock, IndexedDB)   │
+                  └──────┬──────────────┬──────────────┬─────────┘
+                         │              │              │
+        ┌────────────────▼──┐    ┌──────▼──────┐    ┌──▼────────────────┐
+        │      bitMsg       │    │  bitDevices │    │     bitDrive      │
+        │ (Mensajería E2EE) │    │  & bitcli   │    │  (Git P2P Dist)   │
+        └───────────────────┘    └─────────────┘    └───────────────────┘
+```
 
-## 🌐 Acceso Web
+### 1. bitOS Core (Plataforma y Seguridad)
+- **Bóveda Criptográfica (Vault)**: Protege las claves privadas y metadatos sensibles localmente mediante derivación de clave master con PBKDF2 y cifrado AES-256-GCM.
+- **Purga de RAM y Auto-Bloqueo**: Para mitigar ataques en memoria, el sistema purga claves criptográficas de la RAM y bloquea la terminal tras periodos de inactividad programables o tiempos límites absolutos.
+- **Identidad Criptográfica Autónoma**: Tu identidad no depende de cuentas ni correos, es un par de claves ECDH generadas localmente. El sistema cuenta con validación en red distribuida para impedir el secuestro de identidades (`IDENTITY_PROBE`).
 
-Puedes utilizar la terminal directamente desde tu navegador sin instalar nada:
-👉 **[Abrir BitChat Web](https://calimpio.github.io/bitchat/bitchat.html)**
+### 2. bitMsg (Mensajería Soberana)
+*Antes conocido como bitChat*, es el módulo principal de comunicación punto a punto:
+- **Handshake Criptográfico**: Intercambio de credenciales en red para la derivación del secreto compartido mediante algoritmo ECDH (P-384) e inicio de canal seguro directo.
+- **Canales Cifrados E2EE**: Mensajes cifrados extremo a extremo empleando AES-GCM con claves temporales.
+- **Cola de Mensajes Offline**: Si el destinatario está desconectado, los mensajes se encolan localmente y se replican de forma automática e idempotente en cuanto ambos nodos estén online.
+- **Control de Privacidad**: Gestión de lista negra de contactos, borrado permanente del historial de chats local (Wipe) y revocación de accesos directos.
 
-## 🛠 Arquitectura Técnica
+### 3. bitDrive (Control de Versiones y Almacenamiento P2P)
+Un sistema de almacenamiento de archivos y control de versiones distribuido tipo Git implementado enteramente sobre IndexedDB y WebRTC:
+- **Repositorios y Versionado**: Creación de repositorios locales, registro histórico de Commits (mensaje, timestamp, autor, hash del árbol raíz).
+- **Ramas (Branches)**: Soporte completo para crear ramas en caliente y alternar entre ellas en el espacio de trabajo.
+- **Editor y CRUD de Archivos**: Editor de archivos integrado con capacidad de crear, renombrar, editar y eliminar ficheros en caliente sobre el área de trabajo (Working Directory).
+- **Colaboración P2P y Pull Requests (PRs)**:
+  - Creación de Pull Requests P2P directos entre ramas.
+  - Herramienta de visualización de diferencias línea a línea (diffs) que muestra archivos añadidos, modificados o eliminados.
+  - Sistema de comentarios criptográficos directamente sobre los Pull Requests.
+  - Fusión de ramas (Merge) e integración directa.
+- **Clonación Remota**: Permite buscar y clonar de forma directa repositorios alojados en cualquiera de tus terminales personales autorizadas.
 
-El proyecto se divide en una arquitectura moderna de frontend TypeScript y un contenedor nativo para Windows:
+### 4. bitDevices & bitcli (Orquestación y Consola)
+- **Inventario de Terminales**: Vinculación y monitorización del estado de conexión de todos tus dispositivos bajo una única identidad.
+- **Acceso por Llave (Key Access Code)**: Protocolo seguro que permite vincular terminales sin entorno gráfico (como la interfaz de consola **bitcli**) mediante un código PIN de 6 dígitos autogenerado. El navegador abre un endpoint de enlace HTTP en `127.0.0.1:18085` para la transferencia de credenciales cifradas.
+- **Permisos de Replicación Granulares**: Control total sobre qué dispositivos tienen permiso para replicar qué chats, permitiendo establecer réplicas globales o sincronizaciones selectivas.
 
-### Frontend (TypeScript + Vite)
-- **Local-First SDK**: Lógica modular en `src/sdk/` para base de datos (IndexedDB), autenticación y networking P2P (PeerJS/WebRTC).
-- **Componentes UI**: Sistema ligero de micro-componentes funcionales en `src/components/ui/`.
-- **Estado Global**: Gestión de estado tipado en `src/sdk/models/state.ts`.
-- **Vite**: Bundler ultra-rápido para desarrollo y producción.
+---
 
-### Contenedor Windows (.NET 8)
-- **WebView2**: Integración nativa del motor de Chrome para ejecutar el frontend.
-- **Virtual Hosting**: Mapeo de archivos locales a un dominio seguro (`https://bitchat.local`).
+## 🛠️ Contenedor de Escritorio (Windows)
+
+El cliente nativo para Windows se integra de manera fluida con la web app de **bitOS**:
+- **WebView2**: Ejecuta la lógica web con el motor de renderizado de Chromium en un contenedor liviano y native-like.
+- **Virtual Hosting Mapped**: Mapea directamente la compilación local al dominio seguro `https://bitos.local` impidiendo la inyección externa de recursos (cumpliendo con CSP estricto).
+- **Pipeline Automatizado**: Scripts de empaquetado nativo y generación automática de manifiestos Winget de tipo portable actualizados con el checksum SHA256 correspondiente.
+
+---
 
 ## 📁 Estructura del Proyecto
 
-- `src/`: Código fuente de la aplicación TypeScript.
-  - `sdk/`: Servicios de Red, DB y Auth.
-  - `components/`: UI reutilizable.
-  - `pages/`: Vistas de la aplicación.
-- `windows/`: Proyecto .NET y herramientas de automatización.
-  - `www/`: Build de producción de la web para la terminal.
-  - `manifests/`: Manifiestos de instalación para WinGet.
-  - `sync.cjs`: Script de sincronización de assets.
-  - `build.cjs`: Pipeline de compilación y actualización de manifiestos.
-
-## 🛠 Desarrollo y Build
-
-### Requisitos
-- Node.js (v18+)
-- .NET 8 SDK (para la versión de escritorio)
-
-### Comandos de Frontend
-```bash
-npm install      # Instalar dependencias
-npm run dev      # Servidor de desarrollo (Vite)
-npm run build    # Compilar frontend (TypeScript -> JS)
+```
+bitos/
+├── src/                      # Código fuente TypeScript del Frontend
+│   ├── sdk/                  # Servicios de nivel de sistema y base de datos
+│   │   ├── models/           # Definiciones de tipo, esquemas de bitDrive y Vault
+│   │   ├── services/         # Lógica de Peer, Auth (Master Key), DB y Criptografía
+│   │   └── index.ts          # Inicializador y punto de exportación
+│   ├── store/                # Estado reactivo global de bitOS (Zustand)
+│   ├── components/           # Componentes modulares de React
+│   │   ├── ui/               # Botones, entradas de texto, modales y tarjetas
+│   │   └── views/            # Vistas (ChatView, DriveView, DevicesView, SettingsView)
+│   └── pages/                # Estructuras de login (Auth.tsx) y dashboard principal
+├── cli/                      # Cliente CLI para Terminal (bitcli)
+│   └── src/                  # Código TypeScript para bitcli (Identity, Login, Export)
+├── windows/                  # Proyecto nativo .NET 8 para Windows
+│   └── manifests/            # Manifiestos Winget para la distribución automática
+├── bitmsg.html               # Frontend inyectado compilado autocontenido (Standalone)
+├── single.cjs                # Script de inlining CSS/JS para bitmsg.html
+└── package.json              # Configuración de dependencias y scripts de construcción
 ```
 
-### Comandos de Windows (Desktop)
+---
+
+## 🚀 Guía de Construcción y Ejecución
+
+### Requisitos Previos
+- **Node.js** (v18+)
+- **.NET 8 SDK** (Requerido solo para compilar el cliente de escritorio en Windows)
+
+### 1. Construcción del Frontend y CLI
+Instala las dependencias y compila los paquetes:
 ```bash
-# 1. Sincronizar el build web con la carpeta de Windows
+# Instalar dependencias globales del proyecto
+npm install
+
+# Iniciar servidor de desarrollo en caliente (Vite - Puerto 3000)
+npm run dev
+
+# Compilar proyecto a archivos estáticos (dist/)
+npm run build
+
+# Construir el bundle standalone de bitMsg (bitmsg.html)
+npm run build-single
+```
+
+Para el cliente de consola **bitcli**:
+```bash
+cd cli
+npm install
+npm run build   # Compila TypeScript a JavaScript en cli/dist/
+```
+
+### 2. Construcción de la Aplicación de Escritorio
+Sincroniza y compila el contenedor nativo:
+```bash
+# Sincroniza los assets compilados con la carpeta del contenedor
 npm run sync-windows
 
-# 2. Compilar ejecutable, empaquetar ZIP y actualizar manifiestos WinGet
+# Compila el ejecutable nativo en Release, crea el ZIP y actualiza los manifiestos Winget
 npm run build-windows-64
 ```
+El archivo ZIP resultante se creará en `windows/bitOS_v1.0.0.zip` y el ejecutable autoportable se generará bajo `windows/publish_64/bitOS.exe`.
 
-## 📦 Instalación
+---
 
-### WinGet
-```powershell
-winget install BitChat
-```
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia **MIT**. Consulta el archivo de Términos y Condiciones dentro de la aplicación para más detalles.
+## 🔒 Estándares de Seguridad
+1. **Zero-Knowledge Persistence**: El servidor PeerJS se utiliza únicamente como señalizador de red (signaling) WebRTC; no almacena identidades, mensajes ni metadatos de las comunicaciones.
+2. **Double-Encryption Barrier**: Los mensajes se cifran en tránsito con el secreto ECDH derivado del handshake E2EE. Una vez recibidos, se vuelven a cifrar utilizando la clave derivada del Master Password del usuario (`aesKey`) antes de ser guardados en la base de datos local `bitmsg_db`.
+3. **RAM Purge Protection**: Todas las variables que guardan secretos (como `masterPassword` y `aesKey`) en el estado global Zustand son vaciadas inmediatamente cuando se bloquea el terminal o cuando se supera el temporizador de inactividad.
 
 ---
 *Desarrollado por Calimpio - "Tu terminal, tu soberanía."*

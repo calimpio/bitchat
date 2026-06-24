@@ -2,7 +2,7 @@ import { DB } from './db.ts';
 import { useStore } from '../../store/useStore.ts';
 import { Credentials, ContactMap, Contact } from '../models/types.ts';
 import { CryptoService, arrayBufferToBase64, base64ToArrayBuffer } from './crypto.ts';
-import { IBitChatAuth } from './interfaces/IAuthService.ts';
+import { IBitMsgAuth } from './interfaces/IAuthService.ts';
 import { VaultService } from './vault.ts';
 
 export function normalizeId(id: string): string {
@@ -30,7 +30,7 @@ export async function generarQuintaId(cuartaA: string, cuartaB: string): Promise
     return hash.substring(0, 10);
 }
 
-export const BitChatAuth: IBitChatAuth = {
+export const BitMsgAuth: IBitMsgAuth = {
     async guardarMisCredenciales(idPublico: string, idPrivado: string, password: string): Promise<void> {
         // 1. Salt for master key derivation
         const saltBuffer = crypto.getRandomValues(new Uint8Array(16));
@@ -48,7 +48,7 @@ export const BitChatAuth: IBitChatAuth = {
         const { ciphertext: encryptedPriv, iv: privIv } = await CryptoService.encrypt(masterKey, JSON.stringify(privateKeyJWK));
         
         // 5. Create Auth Witness (Proof of knowledge)
-        const { ciphertext: witness, iv: witnessIv } = await CryptoService.encrypt(masterKey, "BITCHAT_IDENTITY_OK");
+        const { ciphertext: witness, iv: witnessIv } = await CryptoService.encrypt(masterKey, "BITMSG_IDENTITY_OK");
 
         const creds: Credentials = { 
             idPublico, 
@@ -95,7 +95,7 @@ export const BitChatAuth: IBitChatAuth = {
             const masterKey = await CryptoService.deriveMasterKey(inputPassword, saltBuffer);
             
             const decryptedWitness = await CryptoService.decrypt(masterKey, creds.authWitness, creds.authIv);
-            if (decryptedWitness === "BITCHAT_IDENTITY_OK") {
+            if (decryptedWitness === "BITMSG_IDENTITY_OK") {
                 if (!creds.createdAt) {
                     creds.createdAt = Date.now();
                     await DB.setCreds(creds);
@@ -159,7 +159,7 @@ export const BitChatAuth: IBitChatAuth = {
     },
 
     async migrarContactosSeguros(): Promise<void> {
-        const legacyJSON = localStorage.getItem('bitchat_auth_contacts');
+        const legacyJSON = localStorage.getItem('bitchat_auth_contacts') || localStorage.getItem('bitmsg_auth_contacts');
         if (!legacyJSON) return;
 
         try {
@@ -169,6 +169,7 @@ export const BitChatAuth: IBitChatAuth = {
                 await this.guardarContacto(idPublico, c.tokenCuartaCredencial, c.insecure, c.publicKey);
             }
             localStorage.removeItem('bitchat_auth_contacts');
+            localStorage.removeItem('bitmsg_auth_contacts');
         } catch (e) {
             console.error("Migration failure", e);
         }

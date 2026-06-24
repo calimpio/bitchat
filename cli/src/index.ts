@@ -49,7 +49,7 @@ identityCmd.command('create')
         const { ciphertext: encryptedPriv, iv: privIv } = await CryptoService.encrypt(masterKey, JSON.stringify(privateKeyJWK));
         
         // 5. Create Auth Witness (Proof of knowledge)
-        const { ciphertext: witness, iv: witnessIv } = await CryptoService.encrypt(masterKey, "BITCHAT_IDENTITY_OK");
+        const { ciphertext: witness, iv: witnessIv } = await CryptoService.encrypt(masterKey, "BITMSG_IDENTITY_OK");
 
         const creds = { 
             idPublico: publicId, 
@@ -101,7 +101,7 @@ identityCmd.command('show')
         const masterKey = await CryptoService.deriveMasterKey(password, saltBuffer);
         
         const decryptedWitness = await CryptoService.decrypt(masterKey, creds.authWitness, creds.authIv);
-        if (decryptedWitness !== "BITCHAT_IDENTITY_OK") {
+        if (decryptedWitness !== "BITMSG_IDENTITY_OK") {
             console.error('Error: Decrypt verification failed. Invalid master password.');
             process.exit(1);
         }
@@ -138,7 +138,7 @@ identityCmd.command('export')
         const masterKey = await CryptoService.deriveMasterKey(password, saltBuffer);
         
         const decryptedWitness = await CryptoService.decrypt(masterKey, creds.authWitness, creds.authIv);
-        if (decryptedWitness !== "BITCHAT_IDENTITY_OK") {
+        if (decryptedWitness !== "BITMSG_IDENTITY_OK") {
             console.error('Error: Verification failed. Invalid master password.');
             process.exit(1);
         }
@@ -162,7 +162,7 @@ program.command('login')
         console.log(`\n-------------------------------------------------------------`);
         console.log(`🔑 CÓDIGO DE ACCESO POR LLAVE: BC-${code}`);
         console.log(`-------------------------------------------------------------`);
-        console.log(`1. Ve a BitChat en tu navegador.`);
+        console.log(`1. Ve a bitOS en tu navegador.`);
         console.log(`2. Dirígete a 'bitDevices' -> 'Acceso por Llave'.`);
         console.log(`3. Introduce el código 'BC-${code}' para vincular este CLI.`);
         console.log(`-------------------------------------------------------------\n`);
@@ -220,7 +220,7 @@ program.command('login')
                         const { ciphertext: encryptedPriv, iv: privIv } = await CryptoService.encrypt(masterKey, JSON.stringify(privateKey));
                         
                         // 4. Create Auth Witness
-                        const { ciphertext: witness, iv: witnessIv } = await CryptoService.encrypt(masterKey, "BITCHAT_IDENTITY_OK");
+                        const { ciphertext: witness, iv: witnessIv } = await CryptoService.encrypt(masterKey, "BITMSG_IDENTITY_OK");
                         
                         const creds = { 
                             idPublico, 

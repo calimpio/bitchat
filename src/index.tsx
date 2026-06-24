@@ -2,7 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 import { App } from './App.tsx';
-import { DB, BitChatAuth } from './sdk/index.ts';
+import { DB, BitMsgAuth } from './sdk/index.ts';
 import { useStore } from './store/useStore.ts';
 
 const rootElement = document.getElementById('root');
@@ -25,7 +25,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 DB.init().then(async () => {
-    const creds = await BitChatAuth.obtenerMisCredenciales();
+    const creds = await BitMsgAuth.obtenerMisCredenciales();
     if (creds) {
         useStore.getState().setPantalla('AUTH_LOGIN');
         useStore.getState().setMe(creds);

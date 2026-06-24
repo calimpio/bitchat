@@ -1,10 +1,10 @@
 import { Credentials, ContactMap } from '../../models/types.ts';
 
 /**
- * IBitChatAuth manages user identity, cryptographic key derivation, and contact management.
+ * IBitMsgAuth manages user identity, cryptographic key derivation, and contact management.
  * It handles the transition between legacy and modern identities using PBKDF2.
  */
-export interface IBitChatAuth {
+export interface IBitMsgAuth {
     /** 
      * Generates a new identity: derives a master key, creates ECDH keypair, 
      * encrypts private key and saves to IndexedDB.

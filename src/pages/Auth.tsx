@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore.ts';
-import { BitChatAuth, PeerService, DB } from '../sdk/index.ts';
+import { BitMsgAuth, PeerService, DB } from '../sdk/index.ts';
 import { Card } from '../components/ui/Card.tsx';
 import { Input } from '../components/ui/Input.tsx';
 
@@ -33,21 +33,21 @@ export const AuthPage: React.FC = () => {
                 await DB.setCreds(validationResult);
             } else {
                 console.log("[AUTH] Nueva identidad. Generando llaves...");
-                await BitChatAuth.guardarMisCredenciales(pub, priv, pass);
+                await BitMsgAuth.guardarMisCredenciales(pub, priv, pass);
             }
 
-            const creds = await BitChatAuth.obtenerMisCredenciales();
+            const creds = await BitMsgAuth.obtenerMisCredenciales();
             setMe(creds);
             setPantalla('AUTH_LOGIN');
             setIsLoading(false);
         } else {
-            if (!(await BitChatAuth.verificarPassword(pass))) {
+            if (!(await BitMsgAuth.verificarPassword(pass))) {
                 setError('Fallo de derivación');
                 return;
             }
             setMasterPassword(pass);
             
-            await BitChatAuth.migrarContactosSeguros();
+            await BitMsgAuth.migrarContactosSeguros();
             await DB.migratePlainMessages();
 
             if (me) {
@@ -65,7 +65,7 @@ export const AuthPage: React.FC = () => {
         <div style={{ display: 'flex', height: '100vh', width: '100vw', alignItems: 'center', justifyContent: 'center' }}>
             <Card className="fade-in" style={{ width: '400px', padding: '40px' }}>
                 <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-                    <h1 style={{ color: 'var(--primary)', fontSize: '28px', marginBottom: '8px' }}>BitChat</h1>
+                    <h1 style={{ color: 'var(--primary)', fontSize: '28px', marginBottom: '8px' }}>bitOS</h1>
                     <p style={{ color: 'var(--text-dim)', fontSize: '13px' }}>
                         {isLogin ? 'Terminal de Soberanía Criptográfica' : 'Genera tu Identidad Autónoma'}
                     </p>
@@ -109,7 +109,7 @@ export const AuthPage: React.FC = () => {
                         style={{ textAlign: 'center', fontSize: '11px', color: 'var(--text-dim)', cursor: 'pointer', marginTop: '10px' }}
                         onClick={() => setPantalla('TERMS')}
                     >
-                        Al usar BitChat, aceptas los Términos y Condiciones
+                        Al usar bitOS, aceptas los Términos y Condiciones
                     </p>
                 </div>
             </Card>

@@ -1,6 +1,6 @@
 import { RPCContext } from '../models/rpcContext.ts';
 import { DB } from '../../db.ts';
-import { BitChatAuth } from '../../auth.ts';
+import { BitMsgAuth } from '../../auth.ts';
 import { PeerService } from '../../peer.ts';
 import { VaultService } from '../../vault.ts';
 import { CryptoService } from '../../crypto.ts';
@@ -16,7 +16,7 @@ export const syncController = {
         const requestingDevice = allDevices.find(d => d.peerId === ctx.conn.peer);
         if (!requestingDevice) return; // O lanzar RPCError
         
-        const allContactos = await BitChatAuth.obtenerContactos();
+        const allContactos = await BitMsgAuth.obtenerContactos();
         const filteredContactos: ContactMap = {};
         const allowedChatIds: string[] = [];
         
@@ -70,7 +70,7 @@ export const syncController = {
         }
 
         for (const id in contactos) { 
-            await BitChatAuth.guardarContacto(id, contactos[id].tokenCuartaCredencial, contactos[id].insecure, contactos[id].publicKey, contactos[id].syncAllowedDevices, contactos[id].sharedSecret); 
+            await BitMsgAuth.guardarContacto(id, contactos[id].tokenCuartaCredencial, contactos[id].insecure, contactos[id].publicKey, contactos[id].syncAllowedDevices, contactos[id].sharedSecret); 
             delete PeerService.sharedKeys[id]; 
         }
 

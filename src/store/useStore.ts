@@ -37,7 +37,7 @@ const savedDuration = parseInt(localStorage.getItem('bit_session_timeout_duratio
 
 export const useStore = create<AppStore>((set, get) => ({
     pantalla: 'AUTH',
-    activeApp: 'bitChat',
+    activeApp: 'bitMsg',
     error: '',
     chatConIdPublico: null,
     historiales: {},

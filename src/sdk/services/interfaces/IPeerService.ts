@@ -48,7 +48,7 @@ export interface IPeerService {
     /** Probes the network to ensure an identity is not already claimed with different credentials. */
     validarIdentidadEnRed(idPublico: string, idPrivado: string, passwordHash: string): Promise<boolean | Credentials>;
 
-    /** Initiates a connection request or handshake with another BitChat node. */
+    /** Initiates a connection request or handshake with another BitMsg node. */
     conectarAContacto(idPublicoAmigo: string, huellaEsperada?: string): Promise<void>;
 
     /** Internal helper to derive shared key. */

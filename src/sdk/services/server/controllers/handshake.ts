@@ -1,6 +1,6 @@
 import { RPCContext } from '../models/rpcContext.ts';
 import { DB } from '../../db.ts';
-import { BitChatAuth, generarCuartaCredencial } from '../../auth.ts';
+import { BitMsgAuth, generarCuartaCredencial } from '../../auth.ts';
 import { PeerService } from '../../peer.ts';
 import { CryptoService } from '../../crypto.ts';
 import { useStore } from '../../../../store/useStore.ts';
@@ -16,7 +16,7 @@ import {
 export const handshakeController = {
     async handleSecurityAlert(ctx: RPCContext) {
         const p = validateFields<IPaqueteSecurityAlert>(ctx.paquete, ['idComprometido']);
-        await BitChatAuth.marcarContactoInseguro(p.idComprometido);
+        await BitMsgAuth.marcarContactoInseguro(p.idComprometido);
     },
 
     async handleConnectionReq(ctx: RPCContext) {
@@ -38,7 +38,7 @@ export const handshakeController = {
     async handleHandshakeStart(ctx: RPCContext) {
         const p = validateFields<IPaqueteHandshakeStart>(ctx.paquete, ['miIdPublico', 'cuartaCredencial', 'publicKey']);
         const miCuarta = await generarCuartaCredencial(ctx.misCreds!.idPublico, ctx.misCreds!.idPrivado, useStore.getState().masterPassword);
-        await BitChatAuth.guardarContacto(p.miIdPublico, p.cuartaCredencial, false, p.publicKey);
+        await BitMsgAuth.guardarContacto(p.miIdPublico, p.cuartaCredencial, false, p.publicKey);
         PeerService._replicateContact(p.miIdPublico);
         await ctx.response({ miIdPublico: ctx.misCreds!.idPublico, cuartaCredencialAmigo: miCuarta, publicKey: ctx.misCreds!.publicKey! });
         PeerService._establecerCanalSeguro(p.miIdPublico, miCuarta, p.cuartaCredencial, ctx.conn);
@@ -47,7 +47,7 @@ export const handshakeController = {
     async handleHandshakeFinal(ctx: RPCContext) {
         const p = validateFields<IPaqueteHandshakeFinal>(ctx.paquete, ['miIdPublico', 'cuartaCredencialAmigo', 'publicKey']);
         const miCuarta = await generarCuartaCredencial(ctx.misCreds!.idPublico, ctx.misCreds!.idPrivado, useStore.getState().masterPassword);
-        await BitChatAuth.guardarContacto(p.miIdPublico, p.cuartaCredencialAmigo, false, p.publicKey);
+        await BitMsgAuth.guardarContacto(p.miIdPublico, p.cuartaCredencialAmigo, false, p.publicKey);
         PeerService._replicateContact(p.miIdPublico);
         PeerService._establecerCanalSeguro(p.miIdPublico, miCuarta, p.cuartaCredencialAmigo, ctx.conn);
         PeerService._enviarPendientes(p.miIdPublico, ctx.conn);

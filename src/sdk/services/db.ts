@@ -10,7 +10,7 @@ export const DB: IDBService = {
 
     init(): Promise<void> {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('bitchat_db', 14);
+            const req = indexedDB.open('bitmsg_db', 14);
             req.onupgradeneeded = (e: IDBVersionChangeEvent) => {
                 const db = (e.target as IDBOpenDBRequest).result;
                 const tx = (e.target as IDBOpenDBRequest).transaction!;

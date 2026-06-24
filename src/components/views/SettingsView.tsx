@@ -31,7 +31,8 @@ export const SettingsView: React.FC = () => {
     const handleClearData = async () => {
         if (confirm("Se borrarán mensajes y contactos. ¿Continuar?")) {
             if (DB.db) DB.db.close();
-            const req = indexedDB.deleteDatabase('bitchat_db');
+            indexedDB.deleteDatabase('bitchat_db');
+            const req = indexedDB.deleteDatabase('bitmsg_db');
             req.onsuccess = () => { localStorage.clear(); location.reload(); };
         }
     };

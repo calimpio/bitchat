@@ -1,4 +1,4 @@
-import { BitChatAuth, generarCuartaCredencial } from '../../auth.ts';
+import { BitMsgAuth, generarCuartaCredencial } from '../../auth.ts';
 import { useStore } from '../../../../store/useStore.ts';
 import { RPCContext } from '../models/rpcContext.ts';
 import { RPCError } from '../errors/RPCError.ts';
@@ -6,7 +6,7 @@ import { validateFields } from '../core/validation.ts';
 import { IPaqueteIdentityProbe, IPaqueteSyncRequest, IPaqueteSyncData } from '../../../models/types.ts';
 
 export const authMiddleware = async (ctx: RPCContext): Promise<void> => {
-    const misCreds = await BitChatAuth.obtenerMisCredenciales();
+    const misCreds = await BitMsgAuth.obtenerMisCredenciales();
     if (!misCreds) {
         throw new RPCError('NO_CREDENTIALS', 'No hay credenciales locales configuradas.', true);
     }

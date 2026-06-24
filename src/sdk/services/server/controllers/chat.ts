@@ -4,7 +4,7 @@ import { PeerService } from '../../peer.ts';
 import { CryptoService } from '../../crypto.ts';
 import { Message, IPaqueteMsg, IPaqueteMsgAck, IPaqueteGetMessages } from '../../../models/types.ts';
 import { validateFields } from '../core/validation.ts';
-import { BitChatAuth } from '../../auth.ts';
+import { BitMsgAuth } from '../../auth.ts';
 import { RPCError } from '../errors/RPCError.ts';
 
 export const chatController = {
@@ -61,7 +61,7 @@ export const chatController = {
         }
 
         // 2. Verificar permisos de sincronización para este chat específico
-        const contactos = await BitChatAuth.obtenerContactos();
+        const contactos = await BitMsgAuth.obtenerContactos();
         const contacto = contactos[p.chatId];
         
         const canSync = requestingDevice.globalSync || contacto?.syncAllowedDevices?.includes(requestingDevice.deviceId);

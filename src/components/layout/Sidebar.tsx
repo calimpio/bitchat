@@ -8,7 +8,7 @@ export const Sidebar: React.FC = () => {
     const logout = () => {
         if (PeerService.peer) PeerService.peer.destroy();
         setPantalla('AUTH_LOGIN');
-        setActiveApp('bitChat');
+        setActiveApp('bitMsg');
         setMasterPassword('');
         setAesKey(null as any);
         setChatConIdPublico(null);
@@ -22,10 +22,10 @@ export const Sidebar: React.FC = () => {
             </div>
             <div className="sidebar-content">
                 <div 
-                    className={`nav-item ${activeApp === 'bitChat' ? 'active' : ''}`} 
-                    onClick={() => setActiveApp('bitChat')}
+                    className={`nav-item ${activeApp === 'bitMsg' ? 'active' : ''}`} 
+                    onClick={() => setActiveApp('bitMsg')}
                 >
-                    💬 bitChat
+                    💬 bitMsg
                 </div>
                 <div 
                     className={`nav-item ${activeApp === 'bitDevices' ? 'active' : ''}`} 

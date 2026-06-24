@@ -5,7 +5,7 @@ using System.Windows.Forms;
 using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Web.WebView2.Core;
 
-namespace BitChat
+namespace bitOS
 {
     public class Program : Form
     {
@@ -21,7 +21,7 @@ namespace BitChat
 
         public Program()
         {
-            this.Text = "BitChat Sovereign Terminal";
+            this.Text = "bitOS Sovereign Terminal";
             this.Width = 1024;
             this.Height = 768;
             this.StartPosition = FormStartPosition.CenterScreen;
@@ -42,11 +42,11 @@ namespace BitChat
             string wwwPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "www");
             
             webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
-                "bitchat.local", 
+                "bitos.local", 
                 wwwPath, 
                 CoreWebView2HostResourceAccessKind.Allow);
 
-            webView.Source = new Uri("https://bitchat.local/index.html");
+            webView.Source = new Uri("https://bitos.local/index.html");
             
             // Hide context menu and dev tools for a more native feel
             webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;

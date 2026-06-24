@@ -4,11 +4,11 @@ const path = require('path');
 const crypto = require('crypto');
 
 const version = '1.0.0';
-const zipName = `BitChat_v1.0.0.zip`;
+const zipName = `bitOS_v1.0.0.zip`;
 const windowsDir = __dirname;
 const publishDir = path.join(windowsDir, 'publish_64');
 const zipPath = path.join(windowsDir, zipName);
-const manifestPath = path.join(windowsDir, 'manifests', 'c', 'Calimpio', 'BitChat', version, 'Calimpio.BitChat.installer.yaml');
+const manifestPath = path.join(windowsDir, 'manifests', 'c', 'Calimpio', 'bitOS', version, 'Calimpio.bitOS.installer.yaml');
 
 function run(cmd, cwd = windowsDir) {
     console.log(`Executing: ${cmd}`);
@@ -18,7 +18,7 @@ function run(cmd, cwd = windowsDir) {
 try {
     // 1. Compile
     console.log('--- Compiling Windows Project ---');
-    run(`dotnet publish BitChat.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish_64`);
+    run(`dotnet publish bitOS.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish_64`);
 
     // 2. Create ZIP using PowerShell
     console.log('--- Creating ZIP Package ---');

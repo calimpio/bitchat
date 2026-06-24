@@ -10,7 +10,7 @@ import { DriveView } from '../components/views/DriveView.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { Input } from '../components/ui/Input.tsx';
 import { Button } from '../components/ui/Button.tsx';
-import { PeerService, DB, BitChatAuth } from '../sdk/index.ts';
+import { PeerService, DB, BitMsgAuth } from '../sdk/index.ts';
 
 export const DashboardPage: React.FC = () => {
     const { activeApp, showSidebar, setShowSidebar, showModalAdd, showModalConfig, chatConIdPublico, setChatConIdPublico, setMostrarChatMobile } = useStore();
@@ -51,7 +51,7 @@ export const DashboardPage: React.FC = () => {
     const handleDeleteChat = async () => {
         if (chatConIdPublico) {
             await DB.deleteChat(chatConIdPublico);
-            await BitChatAuth.eliminarContacto(chatConIdPublico);
+            await BitMsgAuth.eliminarContacto(chatConIdPublico);
             setChatConIdPublico(null);
             setMostrarChatMobile(false);
             useStore.setState({ showModalConfig: false });
@@ -107,12 +107,12 @@ export const DashboardPage: React.FC = () => {
             <div className="main-content">
                 <Sidebar />
                 <div className="app-viewport">
-                    {activeApp === 'bitChat' && <ChatView />}
+                    {activeApp === 'bitMsg' && <ChatView />}
                     {activeApp === 'Settings' && <SettingsView />}
                     {activeApp === 'bitDevices' && <DevicesView />}
                     {activeApp === 'ChatSettings' && <ChatSettingsView />}
                     {activeApp === 'bitDrive' && <DriveView />}
-                    {activeApp !== 'bitChat' && activeApp !== 'Settings' && activeApp !== 'bitDevices' && activeApp !== 'ChatSettings' && activeApp !== 'bitDrive' && (
+                    {activeApp !== 'bitMsg' && activeApp !== 'Settings' && activeApp !== 'bitDevices' && activeApp !== 'ChatSettings' && activeApp !== 'bitDrive' && (
                         <div style={{ textAlign: 'center', marginTop: '50px', color: 'var(--text-dim)' }}>Próximamente...</div>
                     )}
                 </div>

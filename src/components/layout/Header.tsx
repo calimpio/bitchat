@@ -45,7 +45,7 @@ export const Header: React.FC = () => {
     const logout = () => {
         if (PeerService.peer) PeerService.peer.destroy();
         setPantalla('AUTH_LOGIN');
-        setActiveApp('bitChat');
+        setActiveApp('bitMsg');
         setMasterPassword('');
         setAesKey(null as any);
         setChatConIdPublico(null);

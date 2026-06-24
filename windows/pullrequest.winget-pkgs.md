@@ -1,9 +1,9 @@
-# New package: Calimpio.BitChat version 1.0.0
+# New package: Calimpio.bitOS version 1.0.0
 
 ## 📖 Description
-Submission of the initial version of **BitChat**, a sovereign and private messaging terminal using SHA-256 cryptography and direct P2P networking.
+Submission of the initial version of **bitOS**, a sovereign and private messaging terminal using SHA-256 cryptography and direct P2P networking.
 
-- **Package Name:** BitChat
+- **Package Name:** bitOS
 - **Publisher:** Calimpio
 - **Version:** 1.0.0
 - **Installer Type:** portable
@@ -17,7 +17,7 @@ Submission of the initial version of **BitChat**, a sovereign and private messag
 ## 📦 Manifest Checklist
 
 - [x] Checked that there aren't other open [pull requests](https://github.com/microsoft/winget-pkgs/pulls) for the same manifest update/change
-- [x] This PR only modifies one (1) manifest (Calimpio.BitChat 1.0.0)
+- [x] This PR only modifies one (1) manifest (Calimpio.bitOS 1.0.0)
 - [x] Validated manifest locally with `winget validate`
 - [x] Tested manifest locally with `winget install`
 - [x] Manifest conforms to the [1.6 schema](https://github.com/microsoft/winget-pkgs/tree/master/doc/manifest/schema/1.6.0) (Note: Current manifests use 1.6.0 which is fully supported)

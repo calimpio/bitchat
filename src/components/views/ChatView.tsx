@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store/useStore.ts';
-import { DB, BitChatAuth, PeerService, CryptoService } from '../../sdk/index.ts';
+import { DB, BitMsgAuth, PeerService, CryptoService } from '../../sdk/index.ts';
 import { Card } from '../ui/Card.tsx';
 import { Button } from '../ui/Button.tsx';
 import { Input } from '../ui/Input.tsx';
@@ -19,7 +19,7 @@ export const ChatView: React.FC = () => {
 
     const refreshData = async () => {
         const reqs = await DB.getRequests();
-        const contacts = await BitChatAuth.obtenerContactos();
+        const contacts = await BitMsgAuth.obtenerContactos();
         const devices = await DB.getDevices();
         setRequests(reqs);
         setAllContactos(contacts);
@@ -76,7 +76,7 @@ export const ChatView: React.FC = () => {
             ? currentAllowed.filter(id => id !== deviceId)
             : [...currentAllowed, deviceId];
 
-        await BitChatAuth.guardarContacto(
+        await BitMsgAuth.guardarContacto(
             chatConIdPublico, 
             contact.tokenCuartaCredencial, 
             contact.insecure, 
@@ -101,7 +101,7 @@ export const ChatView: React.FC = () => {
         if (chatConIdPublico) {
             if (confirm("¿Eliminar este chat y el contacto de este dispositivo?")) {
                 await DB.deleteChat(chatConIdPublico);
-                await BitChatAuth.eliminarContacto(chatConIdPublico);
+                await BitMsgAuth.eliminarContacto(chatConIdPublico);
                 setChatConIdPublico(null);
                 setMostrarChatMobile(false);
                 useStore.setState({ showModalConfig: false });
