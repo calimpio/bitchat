@@ -127,7 +127,7 @@ export const BitMsgAuth: IBitMsgAuth = {
         return map;
     },
 
-    async guardarContacto(idPublico: string, tokenCuartaCredencial: string, insecure: boolean = false, publicKey?: JsonWebKey, syncAllowedDevices?: string[], sharedSecret?: string): Promise<void> {
+    async guardarContacto(idPublico: string, tokenCuartaCredencial: string, insecure: boolean = false, publicKey?: JsonWebKey, syncAllowedDevices?: string[], sharedSecret?: string, nombre?: string, descripcion?: string): Promise<void> {
         const existing = await this.obtenerContactos();
         const old = existing[idPublico];
         const now = Date.now();
@@ -138,6 +138,8 @@ export const BitMsgAuth: IBitMsgAuth = {
             publicKey, 
             syncAllowedDevices: syncAllowedDevices !== undefined ? syncAllowedDevices : old?.syncAllowedDevices, 
             sharedSecret: sharedSecret !== undefined ? sharedSecret : old?.sharedSecret,
+            nombre: nombre !== undefined ? nombre : old?.nombre,
+            descripcion: descripcion !== undefined ? descripcion : old?.descripcion,
             createdAt: old?.createdAt || now,
             updatedAt: now
         };

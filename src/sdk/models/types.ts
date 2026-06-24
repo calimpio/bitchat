@@ -18,6 +18,8 @@ export interface Contact {
     publicKey?: JsonWebKey;
     syncAllowedDevices?: string[]; // List of device Public IDs allowed to sync this chat
     sharedSecret?: string; // Base64 of the AES-GCM shared key
+    nombre?: string;
+    descripcion?: string;
     createdAt?: number;
     updatedAt?: number;
 }

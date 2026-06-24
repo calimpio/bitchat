@@ -24,7 +24,7 @@ export interface IBitMsgAuth {
     obtenerContactos(): Promise<ContactMap>;
 
     /** Saves or updates a contact including their E2EE Public Key and sync permissions. */
-    guardarContacto(idPublico: string, tokenCuartaCredencial: string, insecure?: boolean, publicKey?: JsonWebKey, syncAllowedDevices?: string[], sharedSecret?: string): Promise<void>;
+    guardarContacto(idPublico: string, tokenCuartaCredencial: string, insecure?: boolean, publicKey?: JsonWebKey, syncAllowedDevices?: string[], sharedSecret?: string, nombre?: string, descripcion?: string): Promise<void>;
 
     /** Flags a contact as insecure if an identity conflict is detected in the network. */
     marcarContactoInseguro(idPublico: string): Promise<void>;

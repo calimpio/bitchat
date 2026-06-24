@@ -87,12 +87,16 @@ export const DevicesView: React.FC = () => {
     };
 
     const handleLinkDevice = async () => {
-        if (!accessCode) return alert("Por favor introduce el código de acceso");
+                if (!accessCode) return alert("Por favor introduce el código de acceso");
         
-        const cleanCode = accessCode.replace(/\D/g, '');
-        if (cleanCode.length !== 6) {
-            return alert("El código de acceso debe tener 6 dígitos.");
+        const cleanInput = accessCode.trim().toUpperCase();
+        const match = cleanInput.match(/^(?:BC-)?(\d{6})(?:-(\d{5}))?$/);
+        if (!match) {
+            return alert("Formato de código inválido. Debe ser de tipo BC-XXXXXX o BC-XXXXXX-PPPPP.");
         }
+        
+        const cleanCode = match[1];
+        const port = match[2] ? parseInt(match[2], 10) : 18085;
         
         if (!me || !me.encryptedPrivateKey || !me.privateKeyIv) {
             return alert("No se pudo obtener las credenciales locales de este dispositivo.");
@@ -112,7 +116,7 @@ export const DevicesView: React.FC = () => {
             
             setLinkStatus('Transmitiendo credenciales de forma segura al CLI local...');
             
-            const response = await fetch('http://127.0.0.1:18085/link', {
+            const response = await fetch(`http://127.0.0.1:${port}/link`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -286,14 +290,14 @@ export const DevicesView: React.FC = () => {
                     </div>
 
                     <div style={{ background: 'rgba(0, 150, 255, 0.1)', borderLeft: '3px solid var(--accent-blue)', padding: '12px 15px', borderRadius: '4px', fontSize: '12px', color: 'var(--text-main)' }}>
-                        <strong>Instrucciones:</strong> Ejecuta <code>bitcli login</code> en tu terminal para obtener un código de vinculación de 6 dígitos. Ingrésalo a continuación.
+                        <strong>Instrucciones:</strong> Ejecuta <code>bitcli login</code> en tu terminal para obtener un código de vinculación. Ingrésalo a continuación.
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <label style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 'bold' }}>Código de Acceso (ej: BC-123456):</label>
+                        <label style={{ fontSize: '12px', color: 'var(--text-dim)', fontWeight: 'bold' }}>Código de Acceso (ej: BC-123456-54321):</label>
                         <input 
                             type="text"
-                            placeholder="BC-XXXXXX"
+                            placeholder="BC-XXXXXX-PPPPP"
                             value={accessCode}
                             onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
                             disabled={isLinking}

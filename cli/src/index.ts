@@ -157,14 +157,15 @@ program.command('login')
   .action(async (options) => {
     try {
         const code = Math.floor(100000 + Math.random() * 900000).toString();
+        const port = Math.floor(Math.random() * (65535 - 10000 + 1)) + 10000;
         const filePath = getIdentityPath(options);
         
         console.log(`\n-------------------------------------------------------------`);
-        console.log(`🔑 CÓDIGO DE ACCESO POR LLAVE: BC-${code}`);
+        console.log(`🔑 CÓDIGO DE ACCESO POR LLAVE: BC-${code}-${port}`);
         console.log(`-------------------------------------------------------------`);
         console.log(`1. Ve a bitOS en tu navegador.`);
         console.log(`2. Dirígete a 'bitDevices' -> 'Acceso por Llave'.`);
-        console.log(`3. Introduce el código 'BC-${code}' para vincular este CLI.`);
+        console.log(`3. Introduce el código 'BC-${code}-${port}' para vincular este CLI.`);
         console.log(`-------------------------------------------------------------\n`);
         
         const server = http.createServer(async (req, res) => {
@@ -258,8 +259,8 @@ program.command('login')
             }
         });
         
-        server.listen(18085, '127.0.0.1', () => {
-            console.log(`Iniciado servidor local en 127.0.0.1:18085.`);
+        server.listen(port, '127.0.0.1', () => {
+            console.log(`Iniciado servidor local en 127.0.0.1:${port}.`);
             console.log(`Esperando vinculación segura desde el navegador...`);
         });
         

@@ -29,7 +29,7 @@ Este documento detalla el progreso del desarrollo de bitOS y las metas futuras p
     - Sincronización de assets (`sync.cjs`).
     - Compilación nativa y empaquetado ZIP (`build.cjs`).
     - Actualización automática de manifiestos Winget (SHA256).
-- [x] **Bundler Standalone**: Script `single.cjs` para generar un único archivo `bitmsg.html` con todos los recursos inyectados (Inlining).
+- [x] **Bundler Standalone**: Script `single.cjs` para generar un único archivo `bitos.html` con todos los recursos inyectados (Inlining).
 - [x] **Hosting Web**: Despliegue automático a GitHub Pages.
 
 ## 🚀 Próximos Pasos (Próximamente)

@@ -5,7 +5,7 @@ PackageVersion: 1.0.0
 PackageLocale: en-US
 Publisher: Calimpio
 PackageName: bitOS
-PackageUrl: https://github.com/calimpio/bitchat
+PackageUrl: https://github.com/calimpio/bitos
 License: MIT
 ShortDescription: Sovereign Cryptographic P2P Terminal.
 Description: A sovereign and private messaging terminal that uses SHA-256 cryptography and direct P2P networks without central servers.

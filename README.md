@@ -6,6 +6,12 @@ Esta versión consolida el ecosistema en un entorno TypeScript Local-First modul
 
 ---
 
+### 🌐 Demo y Acceso Rápido
+Puedes abrir la terminal soberana en producción directamente desde tu navegador en el siguiente enlace de GitHub Pages:
+👉 **[Abrir bitOS Standalone Terminal (bitos.html)](https://calimpio.github.io/bitos/bitos.html)**
+
+---
+
 ## 🚀 Arquitectura del Ecosistema
 
 El ecosistema de **bitOS** está compuesto por módulos especializados que interactúan a través de un SDK unificado:
@@ -48,7 +54,7 @@ Un sistema de almacenamiento de archivos y control de versiones distribuido tipo
 
 ### 4. bitDevices & bitcli (Orquestación y Consola)
 - **Inventario de Terminales**: Vinculación y monitorización del estado de conexión de todos tus dispositivos bajo una única identidad.
-- **Acceso por Llave (Key Access Code)**: Protocolo seguro que permite vincular terminales sin entorno gráfico (como la interfaz de consola **bitcli**) mediante un código PIN de 6 dígitos autogenerado. El navegador abre un endpoint de enlace HTTP en `127.0.0.1:18085` para la transferencia de credenciales cifradas.
+- **Acceso por Llave (Key Access Code)**: Protocolo seguro que permite vincular terminales sin entorno gráfico (como la interfaz de consola **bitcli**) mediante un código PIN y puerto autogenerados (formato `BC-XXXXXX-PPPPP`). La terminal CLI abre un endpoint de enlace HTTP en un puerto local aleatorio de 5 dígitos para la transferencia de credenciales cifradas.
 - **Permisos de Replicación Granulares**: Control total sobre qué dispositivos tienen permiso para replicar qué chats, permitiendo establecer réplicas globales o sincronizaciones selectivas.
 
 ---
@@ -80,8 +86,8 @@ bitos/
 │   └── src/                  # Código TypeScript para bitcli (Identity, Login, Export)
 ├── windows/                  # Proyecto nativo .NET 8 para Windows
 │   └── manifests/            # Manifiestos Winget para la distribución automática
-├── bitmsg.html               # Frontend inyectado compilado autocontenido (Standalone)
-├── single.cjs                # Script de inlining CSS/JS para bitmsg.html
+├── bitos.html                # Frontend inyectado compilado autocontenido (Standalone)
+├── single.cjs                # Script de inlining CSS/JS para bitos.html
 └── package.json              # Configuración de dependencias y scripts de construcción
 ```
 
@@ -105,7 +111,7 @@ npm run dev
 # Compilar proyecto a archivos estáticos (dist/)
 npm run build
 
-# Construir el bundle standalone de bitMsg (bitmsg.html)
+# Construir el bundle standalone de bitOS (bitos.html)
 npm run build-single
 ```
 

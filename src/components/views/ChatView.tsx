@@ -16,6 +16,38 @@ export const ChatView: React.FC = () => {
     const [msgInput, setMsgInput] = useState('');
     const [currentFingerprint, setCurrentFingerprint] = useState('');
     const chatFlowRef = useRef<HTMLDivElement>(null);
+    const [editNombre, setEditNombre] = useState('');
+    const [editDescripcion, setEditDescripcion] = useState('');
+
+    useEffect(() => {
+        if (chatConIdPublico && allContactos[chatConIdPublico]) {
+            setEditNombre(allContactos[chatConIdPublico].nombre || '');
+            setEditDescripcion(allContactos[chatConIdPublico].descripcion || '');
+        } else {
+            setEditNombre('');
+            setEditDescripcion('');
+        }
+    }, [chatConIdPublico, showModalConfig, allContactos]);
+
+    const handleSaveLocalInfo = async () => {
+        if (!chatConIdPublico) return;
+        const contact = allContactos[chatConIdPublico];
+        if (!contact) return;
+
+        await BitMsgAuth.guardarContacto(
+            chatConIdPublico,
+            contact.tokenCuartaCredencial,
+            contact.insecure,
+            contact.publicKey,
+            contact.syncAllowedDevices,
+            contact.sharedSecret,
+            editNombre.trim(),
+            editDescripcion.trim()
+        );
+        PeerService._replicateContact(chatConIdPublico);
+        refreshData();
+        useStore.setState({ showModalConfig: false });
+    };
 
     const refreshData = async () => {
         const reqs = await DB.getRequests();
@@ -149,8 +181,11 @@ export const ChatView: React.FC = () => {
                         onClick={() => { setChatConIdPublico(cel); setMostrarChatMobile(true); }}
                     >
                         <div>
-                            <p style={{ fontWeight: '700', fontSize: '14px', color: c.insecure ? 'var(--primary)' : 'inherit' }}>{cel}</p>
-                            {c.insecure && <p style={{ fontSize: '10px', color: 'var(--primary)' }}>SUPLANTACIÓN</p>}
+                            <p style={{ fontWeight: '700', fontSize: '14px', color: c.insecure ? 'var(--primary)' : 'inherit', margin: 0 }}>
+                                {c.nombre || cel}
+                            </p>
+                            {c.nombre && <p style={{ fontSize: '11px', color: 'var(--text-dim)', margin: 0 }}>{cel}</p>}
+                            {c.insecure && <p style={{ fontSize: '10px', color: 'var(--primary)', margin: 0 }}>SUPLANTACIÓN</p>}
                         </div>
                         <span className={`status-badge ${c.insecure ? 'status-insecure' : (isSecure ? 'status-online' : 'status-offline')}`}>
                             {c.insecure ? '!' : (isSecure ? 'SECURE' : 'LINK')}
@@ -168,9 +203,19 @@ export const ChatView: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <button className="btn-back-mobile" onClick={() => { setChatConIdPublico(null); setMostrarChatMobile(false); }}>←</button>
                         <div>
-                            <h3 style={{ fontSize: '16px' }}>{chatConIdPublico || 'Selecciona un chat'}</h3>
+                            <h3 style={{ fontSize: '16px', margin: 0 }}>
+                                {chatConIdPublico ? (allContactos[chatConIdPublico]?.nombre || chatConIdPublico) : 'Selecciona un chat'}
+                            </h3>
+                            {chatConIdPublico && allContactos[chatConIdPublico]?.nombre && (
+                                <p style={{ fontSize: '11px', color: 'var(--text-dim)', margin: '2px 0 0 0' }}>ID: {chatConIdPublico}</p>
+                            )}
+                            {chatConIdPublico && allContactos[chatConIdPublico]?.descripcion && (
+                                <p style={{ fontSize: '12px', color: 'var(--text-dim)', margin: '4px 0 0 0', fontStyle: 'italic' }}>
+                                    {allContactos[chatConIdPublico].descripcion}
+                                </p>
+                            )}
                             {chatConIdPublico && currentFingerprint && (
-                                <p style={{ fontSize: '9px', color: 'var(--accent-blue)', letterSpacing: '1px' }}>{currentFingerprint}</p>
+                                <p style={{ fontSize: '9px', color: 'var(--accent-blue)', letterSpacing: '1px', margin: '4px 0 0 0' }}>{currentFingerprint}</p>
                             )}
                         </div>
                     </div>
@@ -215,6 +260,31 @@ export const ChatView: React.FC = () => {
             >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
                     <div>
+                        <h4 style={{ color: 'var(--primary)', marginBottom: '10px', fontSize: '14px' }}>Información Local (Privada)</h4>
+                        <p style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '10px' }}>
+                            Agrega un nombre y descripción para este contacto. Estos datos son privados y solo residen en tus dispositivos.
+                        </p>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '10px' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Nombre / Alias:</label>
+                                <Input 
+                                    placeholder="Ej: Mamá, Juan Pérez..." 
+                                    value={editNombre}
+                                    onChange={(e) => setEditNombre(e.target.value)}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <label style={{ fontSize: '11px', color: 'var(--text-dim)' }}>Descripción:</label>
+                                <Input 
+                                    placeholder="Ej: Trabajo, Amigo de la universidad..." 
+                                    value={editDescripcion}
+                                    onChange={(e) => setEditDescripcion(e.target.value)}
+                                />
+                            </div>
+                            <Button style={{ marginTop: '5px' }} onClick={handleSaveLocalInfo}>Guardar Información</Button>
+                        </div>
+                    </div>
+                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: '20px' }}>
                         <h4 style={{ color: 'var(--accent-blue)', marginBottom: '10px', fontSize: '14px' }}>Sincronización en Red Privada</h4>
                         <p style={{ fontSize: '11px', color: 'var(--text-dim)', marginBottom: '15px' }}>
                             Selecciona qué dispositivos de tu propiedad tienen permiso para replicar este chat.

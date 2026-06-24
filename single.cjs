@@ -3,7 +3,7 @@ const path = require('path');
 
 const distPath = path.join(__dirname, 'dist');
 const htmlPath = path.join(distPath, 'index.html');
-const outputPath = path.join(__dirname, 'bitmsg.html');
+const outputPath = path.join(__dirname, 'bitos.html');
 
 if (!fs.existsSync(htmlPath)) {
     console.error('Error: dist/index.html not found. Run "npm run build" first.');

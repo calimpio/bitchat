@@ -9,8 +9,25 @@ import { IPaqueteIdentityProbe, IPaqueteIdentityMatch } from '../../../models/ty
 export const identityController = {
     async probe(ctx: RPCContext) {
         console.log(`[RPC-SERVER] Procesando IDENTITY_PROBE de ${ctx.conn.peer}`);
-        const p = validateFields<IPaqueteIdentityProbe>(ctx.paquete, ['deIdPublico', 'publicKey'], ['deviceId', 'deviceLabel', 'createdAt']);
+        const isProbe = ctx.conn.peer?.startsWith('bc-probe-');
         
+        const requiredFields: (keyof IPaqueteIdentityProbe)[] = isProbe ? ['deIdPublico'] : ['deIdPublico', 'publicKey'];
+        const optionalFields: (keyof IPaqueteIdentityProbe)[] = isProbe ? ['deviceId', 'deviceLabel', 'createdAt', 'publicKey'] : ['deviceId', 'deviceLabel', 'createdAt'];
+        
+        const p = validateFields<IPaqueteIdentityProbe>(ctx.paquete, requiredFields, optionalFields);
+        
+        if (isProbe) {
+            const soyMasAntiguo = !p.createdAt || ctx.misCreds!.createdAt < p.createdAt;
+            await ctx.response({ 
+                deviceId: PeerService.localDeviceId, 
+                deviceLabel: PeerService.localEnvLabel, 
+                publicKey: ctx.misCreds!.publicKey, 
+                creds: soyMasAntiguo ? ctx.misCreds : undefined,
+                createdAt: ctx.misCreds!.createdAt
+            });
+            return;
+        }
+
         const remoteDeviceId = p.deviceId || ctx.conn.peer!.replace('bc-v2-', '').split('-')[0];
         if (PeerService.deviceConns) PeerService.deviceConns[remoteDeviceId] = ctx.conn;
         
@@ -25,7 +42,7 @@ export const identityController = {
             isOnline: true, 
             lastSeen: Date.now(), 
             peerId: ctx.conn.peer, 
-            publicKey: p.publicKey,
+            publicKey: p.publicKey!,
             accountCreatedAt: p.createdAt,
             globalSync
         });
