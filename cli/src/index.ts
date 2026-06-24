@@ -18,139 +18,6 @@ function getIdentityPath(options: any): string {
     return options.file ? path.resolve(options.file) : path.resolve(process.cwd(), 'identity.json');
 }
 
-// Identity command group
-const identityCmd = program.command('identity').description('Manage local identities');
-
-identityCmd.command('create')
-  .description('Create a new cryptographic identity')
-  .argument('<publicId>', 'Public ID (e.g. phone number)')
-  .argument('<privateId>', 'Private ID (secret passphrase/seed)')
-  .argument('<password>', 'Master Password to encrypt local vault')
-  .option('-f, --file <path>', 'Path to save the identity file')
-  .action(async (publicId, privateId, password, options) => {
-    try {
-        const filePath = getIdentityPath(options);
-        console.log(`Generating keys for ID: ${publicId}...`);
-
-        // 1. Salt for master key derivation
-        const saltBuffer = webcrypto.getRandomValues(new Uint8Array(16));
-
-        const saltBase64 = await arrayBufferToBase64(saltBuffer);
-        
-        // 2. Derive master AES key
-        const masterKey = await CryptoService.deriveMasterKey(password, saltBuffer);
-        
-        // 3. Generate ECDH keypair
-        const keyPair = await CryptoService.generateECDHKeyPair();
-        const publicKeyJWK = await CryptoService.exportKey(keyPair.publicKey);
-        const privateKeyJWK = await CryptoService.exportKey(keyPair.privateKey);
-        
-        // 4. Encrypt Private Key
-        const { ciphertext: encryptedPriv, iv: privIv } = await CryptoService.encrypt(masterKey, JSON.stringify(privateKeyJWK));
-        
-        // 5. Create Auth Witness (Proof of knowledge)
-        const { ciphertext: witness, iv: witnessIv } = await CryptoService.encrypt(masterKey, "BITMSG_IDENTITY_OK");
-
-        const creds = { 
-            idPublico: publicId, 
-            idPrivado: privateId, 
-            authWitness: witness,
-            authIv: witnessIv,
-            salt: saltBase64,
-            publicKey: publicKeyJWK,
-            encryptedPrivateKey: encryptedPriv,
-            privateKeyIv: privIv,
-            createdAt: Date.now()
-        };
-
-        fs.writeFileSync(filePath, JSON.stringify(creds, null, 2), 'utf-8');
-        
-        const fingerprint = await CryptoService.getFingerprint(publicKeyJWK);
-        console.log('\n✅ Identity successfully created!');
-        console.log(`Saved to: ${filePath}`);
-        console.log(`-----------------------------------`);
-        console.log(`Public ID:   ${publicId}`);
-        console.log(`Fingerprint: ${fingerprint}`);
-        console.log(`-----------------------------------`);
-    } catch (error: any) {
-        console.error('Error creating identity:', error.message || error);
-        process.exit(1);
-    }
-  });
-
-identityCmd.command('show')
-  .description('Show local identity information')
-  .argument('<password>', 'Master Password to decrypt private key')
-  .option('-f, --file <path>', 'Path to the identity file')
-  .action(async (password, options) => {
-    try {
-        const filePath = getIdentityPath(options);
-        if (!fs.existsSync(filePath)) {
-            console.error(`Error: Identity file not found at ${filePath}. Run 'bitcli identity create' first.`);
-            process.exit(1);
-        }
-
-        const creds = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        if (!creds.salt || !creds.authWitness || !creds.authIv) {
-            console.error('Error: Identity file format is invalid.');
-            process.exit(1);
-        }
-
-        // Verify password by decrypting witness
-        const saltBuffer = Buffer.from(creds.salt, 'base64');
-        const masterKey = await CryptoService.deriveMasterKey(password, saltBuffer);
-        
-        const decryptedWitness = await CryptoService.decrypt(masterKey, creds.authWitness, creds.authIv);
-        if (decryptedWitness !== "BITMSG_IDENTITY_OK") {
-            console.error('Error: Decrypt verification failed. Invalid master password.');
-            process.exit(1);
-        }
-
-        const fingerprint = await CryptoService.getFingerprint(creds.publicKey);
-        console.log(`\n🔒 Identity Details (Decrypted)`);
-        console.log(`-----------------------------------`);
-        console.log(`Public ID:   ${creds.idPublico}`);
-        console.log(`Private ID:  ${creds.idPrivado}`);
-        console.log(`Fingerprint: ${fingerprint}`);
-        console.log(`Created At:  ${new Date(creds.createdAt).toLocaleString()}`);
-        console.log(`-----------------------------------`);
-    } catch (error: any) {
-        console.error('Verification failed. Invalid password or corrupted file.', error.message || error);
-        process.exit(1);
-    }
-  });
-
-identityCmd.command('export')
-  .description('Export local identity raw credentials')
-  .argument('<password>', 'Master Password')
-  .argument('<outputPath>', 'Destination file path')
-  .option('-f, --file <path>', 'Path to the identity file')
-  .action(async (password, outputPath, options) => {
-    try {
-        const filePath = getIdentityPath(options);
-        if (!fs.existsSync(filePath)) {
-            console.error(`Error: Identity file not found.`);
-            process.exit(1);
-        }
-
-        const creds = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        const saltBuffer = Buffer.from(creds.salt, 'base64');
-        const masterKey = await CryptoService.deriveMasterKey(password, saltBuffer);
-        
-        const decryptedWitness = await CryptoService.decrypt(masterKey, creds.authWitness, creds.authIv);
-        if (decryptedWitness !== "BITMSG_IDENTITY_OK") {
-            console.error('Error: Verification failed. Invalid master password.');
-            process.exit(1);
-        }
-
-        fs.writeFileSync(path.resolve(outputPath), JSON.stringify(creds, null, 2), 'utf-8');
-        console.log(`✅ Identity successfully exported to: ${outputPath}`);
-    } catch (error: any) {
-        console.error('Export failed:', error.message || error);
-        process.exit(1);
-    }
-  });
-
 program.command('login')
   .description('Link this CLI to a browser device using a unique key access code')
   .option('-f, --file <path>', 'Path to save the identity file')
@@ -271,6 +138,25 @@ program.command('login')
         
     } catch (error: any) {
         console.error('Error en comando login:', error.message || error);
+        process.exit(1);
+    }
+  });
+
+program.command('logout')
+  .description('Remove the linked local cryptographic identity file')
+  .option('-f, --file <path>', 'Path to the identity file to remove')
+  .action((options) => {
+    try {
+        const filePath = getIdentityPath(options);
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`\n✅ Identity file successfully removed from: ${filePath}\n`);
+        } else {
+            console.log(`\nℹ️ No identity file found at: ${filePath}\n`);
+        }
+        process.exit(0);
+    } catch (error: any) {
+        console.error('Error during logout:', error.message || error);
         process.exit(1);
     }
   });
