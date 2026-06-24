@@ -5,6 +5,7 @@ import { CryptoService, arrayBufferToBase64 } from './crypto';
 import { webcrypto } from 'crypto';
 import * as readline from 'readline';
 import * as http from 'http';
+import { EncryptedDatabase } from './database';
 
 const program = new Command();
 
@@ -13,19 +14,19 @@ program
   .description('bitOS Command Line Interface')
   .version('1.0.0');
 
-// Helper to resolve identity file path
-function getIdentityPath(options: any): string {
-    return options.file ? path.resolve(options.file) : path.resolve(process.cwd(), 'identity.json');
+// Helper to resolve database path
+function getDatabasePath(options: any): string {
+    return options.file ? path.resolve(options.file) : path.resolve(process.cwd(), 'bitos.db');
 }
 
 program.command('login')
   .description('Link this CLI to a browser device using a unique key access code')
-  .option('-f, --file <path>', 'Path to save the identity file')
+  .option('-f, --file <path>', 'Path to save the identity database file')
   .action(async (options) => {
     try {
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         const port = Math.floor(Math.random() * (65535 - 10000 + 1)) + 10000;
-        const filePath = getIdentityPath(options);
+        const dbPath = getDatabasePath(options);
         
         console.log(`\n-------------------------------------------------------------`);
         console.log(`🔑 CÓDIGO DE ACCESO POR LLAVE: BC-${code}-${port}`);
@@ -102,14 +103,32 @@ program.command('login')
                             createdAt: Date.now()
                         };
                         
-                        fs.writeFileSync(filePath, JSON.stringify(creds, null, 2), 'utf-8');
+                        console.log(`Guardando en la base de datos cifrada SQLite...`);
+                        const db = await EncryptedDatabase.load(dbPath, password);
+                        await db.setCredentials(creds);
+                        
+                        const device = {
+                            deviceId: `bitCLI-${code}`,
+                            idPublico: idPublico,
+                            label: `bitCLI Terminal (${code})`,
+                            isOnline: true,
+                            lastSeen: Date.now(),
+                            peerId: `bc-link-${code}`,
+                            publicKey: publicKey,
+                            accountCreatedAt: Date.now(),
+                            globalSync: false
+                        };
+                        await db.addDevice(device);
+                        
+                        await db.save(dbPath, password);
+                        db.close();
                         
                         // Send success response to browser
                         res.writeHead(200, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ status: 'SUCCESS' }));
                         
                         console.log(`\n✅ ¡Vinculación completada con éxito!`);
-                        console.log(`Identidad guardada en: ${filePath}\n`);
+                        console.log(`Datos guardados en la base de datos cifrada: ${dbPath}\n`);
                         
                         // Close the server and exit program
                         server.close();
@@ -143,16 +162,16 @@ program.command('login')
   });
 
 program.command('logout')
-  .description('Remove the linked local cryptographic identity file')
-  .option('-f, --file <path>', 'Path to the identity file to remove')
+  .description('Remove the linked local cryptographic identity database file')
+  .option('-f, --file <path>', 'Path to the database file to remove')
   .action((options) => {
     try {
-        const filePath = getIdentityPath(options);
-        if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-            console.log(`\n✅ Identity file successfully removed from: ${filePath}\n`);
+        const dbPath = getDatabasePath(options);
+        if (fs.existsSync(dbPath)) {
+            fs.unlinkSync(dbPath);
+            console.log(`\n✅ Database file successfully removed from: ${dbPath}\n`);
         } else {
-            console.log(`\nℹ️ No identity file found at: ${filePath}\n`);
+            console.log(`\nℹ️ No database file found at: ${dbPath}\n`);
         }
         process.exit(0);
     } catch (error: any) {

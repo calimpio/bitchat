@@ -141,5 +141,28 @@ export const CryptoService = {
             true,
             ['encrypt', 'decrypt']
         );
+    },
+
+    async encryptBinary(key: webcrypto.CryptoKey, data: ArrayBuffer): Promise<{ ciphertext: string, iv: string }> {
+        const iv = webcrypto.getRandomValues(new Uint8Array(12));
+        const encrypted = await subtle.encrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            data
+        );
+        return {
+            ciphertext: await arrayBufferToBase64(encrypted),
+            iv: await arrayBufferToBase64(iv)
+        };
+    },
+
+    async decryptBinary(key: webcrypto.CryptoKey, ciphertextBase64: string, ivBase64: string): Promise<ArrayBuffer> {
+        const ciphertext = await base64ToArrayBuffer(ciphertextBase64);
+        const iv = await base64ToArrayBuffer(ivBase64);
+        return await subtle.decrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            ciphertext
+        );
     }
 };
