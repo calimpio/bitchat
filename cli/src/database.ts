@@ -111,6 +111,61 @@ export class EncryptedDatabase {
                 globalSync INTEGER
             );
         `);
+
+        this.db.run(`
+            CREATE TABLE IF NOT EXISTS drive_repositories (
+                repoId TEXT PRIMARY KEY,
+                name TEXT,
+                originDeviceId TEXT,
+                createdAt INTEGER,
+                updatedAt INTEGER
+            );
+        `);
+
+        this.db.run(`
+            CREATE TABLE IF NOT EXISTS drive_branches (
+                branchId TEXT PRIMARY KEY,
+                repoId TEXT,
+                name TEXT,
+                headCommitId TEXT,
+                updatedAt INTEGER
+            );
+        `);
+
+        this.db.run(`
+            CREATE TABLE IF NOT EXISTS drive_objects (
+                hash TEXT PRIMARY KEY,
+                type TEXT,
+                content TEXT
+            );
+        `);
+
+        this.db.run(`
+            CREATE TABLE IF NOT EXISTS drive_pull_requests (
+                prId TEXT PRIMARY KEY,
+                repoId TEXT,
+                title TEXT,
+                description TEXT,
+                sourceBranch TEXT,
+                targetBranch TEXT,
+                status TEXT,
+                author TEXT,
+                createdAt INTEGER,
+                mergedAt INTEGER,
+                closedAt INTEGER,
+                comments TEXT
+            );
+        `);
+
+        this.db.run(`
+            CREATE TABLE IF NOT EXISTS git_index (
+                repoId TEXT,
+                filePath TEXT,
+                hash TEXT,
+                content TEXT,
+                PRIMARY KEY (repoId, filePath)
+            );
+        `);
     }
 
     // Helper methods for CLI usage
@@ -176,6 +231,169 @@ export class EncryptedDatabase {
 
     async deleteCredentials(): Promise<void> {
         this.db.run("DELETE FROM credentials WHERE id = 'me'");
+    }
+
+    // drive repositories
+    async saveRepository(repo: any): Promise<void> {
+        this.db.run(
+            `INSERT OR REPLACE INTO drive_repositories (repoId, name, originDeviceId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)`,
+            [repo.repoId, repo.name, repo.originDeviceId, repo.createdAt, repo.updatedAt]
+        );
+    }
+
+    async getRepository(repoId: string): Promise<any | null> {
+        const stmt = this.db.prepare("SELECT * FROM drive_repositories WHERE repoId = ?");
+        stmt.bind([repoId]);
+        if (stmt.step()) {
+            const row = stmt.getAsObject();
+            stmt.free();
+            return row;
+        }
+        stmt.free();
+        return null;
+    }
+
+    async getRepositories(): Promise<any[]> {
+        const stmt = this.db.prepare("SELECT * FROM drive_repositories");
+        const list: any[] = [];
+        while (stmt.step()) {
+            list.push(stmt.getAsObject());
+        }
+        stmt.free();
+        return list;
+    }
+
+    async deleteRepository(repoId: string): Promise<void> {
+        this.db.run("DELETE FROM drive_repositories WHERE repoId = ?", [repoId]);
+        this.db.run("DELETE FROM drive_branches WHERE repoId = ?", [repoId]);
+        this.db.run("DELETE FROM drive_pull_requests WHERE repoId = ?", [repoId]);
+    }
+
+    // drive branches
+    async saveBranch(branch: any): Promise<void> {
+        this.db.run(
+            `INSERT OR REPLACE INTO drive_branches (branchId, repoId, name, headCommitId, updatedAt) VALUES (?, ?, ?, ?, ?)`,
+            [branch.branchId, branch.repoId, branch.name, branch.headCommitId, branch.updatedAt]
+        );
+    }
+
+    async getBranch(repoId: string, name: string): Promise<any | null> {
+        const stmt = this.db.prepare("SELECT * FROM drive_branches WHERE repoId = ? AND name = ?");
+        stmt.bind([repoId, name]);
+        if (stmt.step()) {
+            const row = stmt.getAsObject();
+            stmt.free();
+            return row;
+        }
+        stmt.free();
+        return null;
+    }
+
+    async getBranches(repoId: string): Promise<any[]> {
+        const stmt = this.db.prepare("SELECT * FROM drive_branches WHERE repoId = ?");
+        stmt.bind([repoId]);
+        const list: any[] = [];
+        while (stmt.step()) {
+            list.push(stmt.getAsObject());
+        }
+        stmt.free();
+        return list;
+    }
+
+    // drive objects
+    async saveDriveObject(obj: any): Promise<void> {
+        this.db.run(
+            `INSERT OR REPLACE INTO drive_objects (hash, type, content) VALUES (?, ?, ?)`,
+            [obj.hash, obj.type, obj.content]
+        );
+    }
+
+    async getDriveObject(hash: string): Promise<any | null> {
+        const stmt = this.db.prepare("SELECT * FROM drive_objects WHERE hash = ?");
+        stmt.bind([hash]);
+        if (stmt.step()) {
+            const row = stmt.getAsObject();
+            stmt.free();
+            return row;
+        }
+        stmt.free();
+        return null;
+    }
+
+    // drive pull requests
+    async savePullRequest(pr: any): Promise<void> {
+        this.db.run(
+            `INSERT OR REPLACE INTO drive_pull_requests (
+                prId, repoId, title, description, sourceBranch, targetBranch, status, author, createdAt, mergedAt, closedAt, comments
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                pr.prId,
+                pr.repoId,
+                pr.title,
+                pr.description,
+                pr.sourceBranch,
+                pr.targetBranch,
+                pr.status,
+                pr.author,
+                pr.createdAt,
+                pr.mergedAt || null,
+                pr.closedAt || null,
+                pr.comments ? JSON.stringify(pr.comments) : '[]'
+            ]
+        );
+    }
+
+    async getPullRequests(repoId: string): Promise<any[]> {
+        const stmt = this.db.prepare("SELECT * FROM drive_pull_requests WHERE repoId = ?");
+        stmt.bind([repoId]);
+        const list: any[] = [];
+        while (stmt.step()) {
+            const row = stmt.getAsObject();
+            row.comments = JSON.parse(row.comments as string || '[]');
+            list.push(row);
+        }
+        stmt.free();
+        return list;
+    }
+
+    async getPullRequest(repoId: string, prId: string): Promise<any | null> {
+        const stmt = this.db.prepare("SELECT * FROM drive_pull_requests WHERE repoId = ? AND prId = ?");
+        stmt.bind([repoId, prId]);
+        if (stmt.step()) {
+            const row = stmt.getAsObject();
+            row.comments = JSON.parse(row.comments as string || '[]');
+            stmt.free();
+            return row;
+        }
+        stmt.free();
+        return null;
+    }
+
+    // staging index
+    async saveIndexEntry(repoId: string, filePath: string, hash: string, content: string): Promise<void> {
+        this.db.run(
+            `INSERT OR REPLACE INTO git_index (repoId, filePath, hash, content) VALUES (?, ?, ?, ?)`,
+            [repoId, filePath, hash, content]
+        );
+    }
+
+    async getIndexEntries(repoId: string): Promise<any[]> {
+        const stmt = this.db.prepare("SELECT * FROM git_index WHERE repoId = ?");
+        stmt.bind([repoId]);
+        const list: any[] = [];
+        while (stmt.step()) {
+            list.push(stmt.getAsObject());
+        }
+        stmt.free();
+        return list;
+    }
+
+    async clearIndex(repoId: string): Promise<void> {
+        this.db.run("DELETE FROM git_index WHERE repoId = ?", [repoId]);
+    }
+
+    async deleteIndexEntry(repoId: string, filePath: string): Promise<void> {
+        this.db.run("DELETE FROM git_index WHERE repoId = ? AND filePath = ?", [repoId, filePath]);
     }
 
     close() {

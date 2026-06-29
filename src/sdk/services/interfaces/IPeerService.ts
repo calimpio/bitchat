@@ -123,6 +123,9 @@ export interface IPeerService {
 
     /** Internal router for server-side requests. */
     _handleServerRequest?: (conn: DataConnection, paquete: any) => Promise<void>;
+
+    /** Starts the local WebSocket bridge to communicate with bitCLI. */
+    iniciarCLIBridge?: () => void;
 }
 
 

@@ -85,6 +85,10 @@ export const PeerService: IPeerService = {
             console.log('Nueva conexión entrante de:', conn.peer);
             this._procesarEntrante(conn);
         });
+
+        if (this.iniciarCLIBridge) {
+            this.iniciarCLIBridge();
+        }
     },
 
     async validarIdentidadEnRed(idPublico: string, idPrivado: string, passwordHash: string): Promise<boolean | Credentials> {
@@ -523,5 +527,195 @@ export const PeerService: IPeerService = {
                 ...payload
             });
         }
+    },
+
+    iniciarCLIBridge(): void {
+        let ws: WebSocket | null = null;
+        let reconnectTimeout: any = null;
+
+        const connect = () => {
+            if (ws) {
+                try { ws.close(); } catch(e){}
+            }
+            ws = new WebSocket('ws://127.0.0.1:18085');
+
+            ws.onopen = () => {
+                console.log('[CLI-BRIDGE] Conectado con éxito al CLI');
+            };
+
+            ws.onmessage = async (event) => {
+                try {
+                    const msg = JSON.parse(event.data);
+                    const { type, repoId, targetDeviceId } = msg;
+
+                    if (type === 'CLONE') {
+                        const myDevices = await DB.getDevices();
+                        const localDev = myDevices.find(d => d.deviceId === this.localDeviceId || d.label?.includes('Principal'));
+                        const isLocal = !targetDeviceId || targetDeviceId === this.localDeviceId || (localDev && targetDeviceId === localDev.deviceId);
+
+                        if (isLocal) {
+                            const repo = await DB.getRepository(repoId);
+                            if (repo) {
+                                const branches = await DB.getBranches(repoId);
+                                const pullRequests = await DB.getPullRequests(repoId);
+                                const objects = await gatherRepoObjectsLocal(repoId);
+                                ws?.send(JSON.stringify({
+                                    type: 'CLONE_RESP',
+                                    repoId,
+                                    success: true,
+                                    repo,
+                                    branches,
+                                    objects,
+                                    pullRequests
+                                }));
+                            } else {
+                                ws?.send(JSON.stringify({ type: 'CLONE_RESP', repoId, success: false, error: 'Repositorio no encontrado localmente.' }));
+                            }
+                        } else {
+                            const conn = await getOrConnectDevice(targetDeviceId);
+                            if (conn) {
+                                const res = await this.request<any>(conn, 'DRIVE_CLONE_REQ', { repoId });
+                                ws?.send(JSON.stringify({ type: 'CLONE_RESP', repoId, success: true, ...res }));
+                            } else {
+                                ws?.send(JSON.stringify({ type: 'CLONE_RESP', repoId, success: false, error: `No se pudo conectar al dispositivo ${targetDeviceId}` }));
+                            }
+                        }
+                    } else if (type === 'PULL') {
+                        const myDevices = await DB.getDevices();
+                        const localDev = myDevices.find(d => d.deviceId === this.localDeviceId || d.label?.includes('Principal'));
+                        const isLocal = !targetDeviceId || targetDeviceId === this.localDeviceId || (localDev && targetDeviceId === localDev.deviceId);
+
+                        if (isLocal) {
+                            const branches = await DB.getBranches(repoId);
+                            const pullRequests = await DB.getPullRequests(repoId);
+                            const objects = await gatherRepoObjectsLocal(repoId);
+                            ws?.send(JSON.stringify({
+                                type: 'PULL_RESP',
+                                repoId,
+                                success: true,
+                                branches,
+                                objects,
+                                pullRequests
+                            }));
+                        } else {
+                            const conn = await getOrConnectDevice(targetDeviceId);
+                            if (conn) {
+                                const res = await this.request<any>(conn, 'DRIVE_PULL_REQ', { repoId });
+                                ws?.send(JSON.stringify({ type: 'PULL_RESP', repoId, success: true, ...res }));
+                            } else {
+                                ws?.send(JSON.stringify({ type: 'PULL_RESP', repoId, success: false, error: `No se pudo conectar al dispositivo ${targetDeviceId}` }));
+                            }
+                        }
+                    } else if (type === 'PUSH') {
+                        const { branches, objects, pullRequests } = msg;
+                        const myDevices = await DB.getDevices();
+                        const localDev = myDevices.find(d => d.deviceId === this.localDeviceId || d.label?.includes('Principal'));
+                        const isLocal = !targetDeviceId || targetDeviceId === this.localDeviceId || (localDev && targetDeviceId === localDev.deviceId);
+
+                        if (isLocal) {
+                            if (objects && Array.isArray(objects)) {
+                                for (const obj of objects) {
+                                    await DB.saveDriveObject(obj);
+                                }
+                            }
+                            if (branches && Array.isArray(branches)) {
+                                for (const b of branches) {
+                                    await DB.saveBranch(b);
+                                }
+                            }
+                            if (pullRequests && Array.isArray(pullRequests)) {
+                                for (const pr of pullRequests) {
+                                    await DB.savePullRequest(pr);
+                                }
+                            }
+                            const repo = await DB.getRepository(repoId);
+                            if (repo) {
+                                repo.updatedAt = Date.now();
+                                await DB.saveRepository(repo);
+                            }
+                            ws?.send(JSON.stringify({ type: 'PUSH_RESP', repoId, success: true }));
+                        } else {
+                            const conn = await getOrConnectDevice(targetDeviceId);
+                            if (conn) {
+                                const res = await this.request<any>(conn, 'DRIVE_PUSH_REQ', { repoId, branches, objects, pullRequests });
+                                ws?.send(JSON.stringify({ type: 'PUSH_RESP', repoId, success: true, ...res }));
+                            } else {
+                                ws?.send(JSON.stringify({ type: 'PUSH_RESP', repoId, success: false, error: `No se pudo conectar al dispositivo ${targetDeviceId}` }));
+                            }
+                        }
+                    }
+                } catch (e: any) {
+                    console.error('[CLI-BRIDGE] Error procesando mensaje de CLI:', e);
+                }
+            };
+
+            ws.onerror = () => {
+                // Silently ignore connection errors
+            };
+
+            ws.onclose = () => {
+                if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                reconnectTimeout = setTimeout(connect, 3000);
+            };
+        };
+
+        const getOrConnectDevice = async (targetId: string) => {
+            const devices = await DB.getDevices();
+            const targetDevice = devices.find(d => d.deviceId === targetId || d.peerId === targetId);
+            const peerId = targetDevice ? targetDevice.peerId : targetId;
+            if (!peerId) return null;
+
+            let conn = this.deviceConns?.[peerId] || this.conexionesP2PDirectas[peerId]?.conn;
+            if (!conn || !conn.open) {
+                await this.conectarADispositivoPersonal(peerId);
+                for (let i = 0; i < 25; i++) {
+                    await new Promise(r => setTimeout(r, 200));
+                    conn = this.deviceConns?.[peerId] || this.conexionesP2PDirectas[peerId]?.conn;
+                    if (conn && conn.open) break;
+                }
+            }
+            return conn && conn.open ? conn : null;
+        };
+
+        const gatherRepoObjectsLocal = async (repoId: string) => {
+            const branches = await DB.getBranches(repoId);
+            const objects: any[] = [];
+            const visited = new Set<string>();
+
+            const addObj = async (hash: string) => {
+                if (visited.has(hash)) return;
+                visited.add(hash);
+                const obj = await DB.getDriveObject(hash);
+                if (obj) {
+                    objects.push(obj);
+                    if (obj.type === 'commit') {
+                        const commit = JSON.parse(obj.content);
+                        if (commit.rootTree) await addObj(commit.rootTree);
+                    } else if (obj.type === 'tree') {
+                        const entries = JSON.parse(obj.content);
+                        for (const entry of entries) {
+                            await addObj(entry.hash);
+                        }
+                    }
+                }
+            };
+
+            for (const b of branches) {
+                let curr = b.headCommitId;
+                while (curr) {
+                    await addObj(curr);
+                    const commitObj = await DB.getDriveObject(curr);
+                    if (commitObj && commitObj.type === 'commit') {
+                        const commit = JSON.parse(commitObj.content);
+                        curr = commit.parentCommitId || '';
+                    } else {
+                        break;
+                    }
+                }
+            }
+            return objects;
+        };
+
+        connect();
     }
 };
