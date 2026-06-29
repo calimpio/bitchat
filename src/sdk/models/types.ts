@@ -70,7 +70,10 @@ export type TipoPaquete =
     | 'DRIVE_PULL_REQ'
     | 'DRIVE_PULL_RESP'
     | 'DRIVE_PUSH_REQ'
-    | 'DRIVE_PUSH_RESP';
+    | 'DRIVE_PUSH_RESP'
+    | 'APP_PUBLISH_BROADCAST'
+    | 'APP_QUERY_REQUEST'
+    | 'APP_QUERY_RESPONSE';
 
 export interface IPaqueteBase {
     tipo: TipoPaquete;
@@ -232,6 +235,20 @@ export interface IPaqueteDrivePushResp extends IPaqueteBase {
     success: boolean;
 }
 
+export interface IPaqueteAppPublishBroadcast extends IPaqueteBase {
+    tipo: 'APP_PUBLISH_BROADCAST';
+    app: any;
+}
+
+export interface IPaqueteAppQueryRequest extends IPaqueteBase {
+    tipo: 'APP_QUERY_REQUEST';
+}
+
+export interface IPaqueteAppQueryResponse extends IPaqueteBase {
+    tipo: 'APP_QUERY_RESPONSE';
+    apps: any[];
+}
+
 export type IPaqueteData = 
     | IPaqueteIdentityProbe 
     | IPaqueteIdentityMatch
@@ -254,7 +271,10 @@ export type IPaqueteData =
     | IPaqueteDrivePullReq
     | IPaqueteDrivePullResp
     | IPaqueteDrivePushReq
-    | IPaqueteDrivePushResp;
+    | IPaqueteDrivePushResp
+    | IPaqueteAppPublishBroadcast
+    | IPaqueteAppQueryRequest
+    | IPaqueteAppQueryResponse;
 
 export interface Device {
     deviceId: string; // Key in database
@@ -272,7 +292,7 @@ export interface Device {
 
 export interface AppState {
     pantalla: 'AUTH' | 'AUTH_LOGIN' | 'DASHBOARD' | 'TERMS';
-    activeApp: 'bitMsg' | 'bitDrive' | 'bitDevices' | 'Settings' | 'ChatSettings';
+    activeApp: 'bitMsg' | 'bitDrive' | 'bitDevices' | 'Settings' | 'ChatSettings' | 'bitApp' | 'bitAppConsole';
     error: string;
     chatConIdPublico: string | null;
     historiales: Record<string, Message[]>;

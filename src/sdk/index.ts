@@ -10,3 +10,4 @@ export * from './services/vault.ts';
 export * from './services/crypto.ts';
 export * from './models/drive.ts';
 export * from './services/drive.ts';
+export * from './services/appManager.ts';

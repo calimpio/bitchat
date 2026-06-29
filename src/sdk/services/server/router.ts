@@ -10,6 +10,7 @@ import { handshakeController } from './controllers/handshake.ts';
 import { DB } from '../db.ts';
 import { PeerService } from '../peer.ts';
 import { driveRPCController } from './controllers/drive.ts';
+import { appRPCController } from './controllers/app.ts';
 
 const responseTypeMap: Record<string, string> = {
     'IDENTITY_PROBE': 'IDENTITY_MATCH',
@@ -20,7 +21,8 @@ const responseTypeMap: Record<string, string> = {
     'DRIVE_LIST_REPOS_REQ': 'DRIVE_LIST_REPOS_RESP',
     'DRIVE_CLONE_REQ': 'DRIVE_CLONE_RESP',
     'DRIVE_PULL_REQ': 'DRIVE_PULL_RESP',
-    'DRIVE_PUSH_REQ': 'DRIVE_PUSH_RESP'
+    'DRIVE_PUSH_REQ': 'DRIVE_PUSH_RESP',
+    'APP_QUERY_REQUEST': 'APP_QUERY_RESPONSE'
 };
 
 export const RPCRouter = {
@@ -74,6 +76,9 @@ export const RPCRouter = {
                 case 'DRIVE_CLONE_REQ': await driveRPCController.handleClone(ctx); break;
                 case 'DRIVE_PULL_REQ': await driveRPCController.handlePull(ctx); break;
                 case 'DRIVE_PUSH_REQ': await driveRPCController.handlePush(ctx); break;
+                case 'APP_PUBLISH_BROADCAST': await appRPCController.handlePublishBroadcast(ctx); break;
+                case 'APP_QUERY_REQUEST': await appRPCController.handleQueryRequest(ctx); break;
+                case 'APP_QUERY_RESPONSE': await appRPCController.handleQueryResponse(ctx); break;
             }
 
             if (PeerService.onRefresh) PeerService.onRefresh();

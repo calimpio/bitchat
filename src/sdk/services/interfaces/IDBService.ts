@@ -112,4 +112,18 @@ export interface IDBService {
     savePullRequest(pr: PullRequest): Promise<void>;
     getPullRequests(repoId: string): Promise<PullRequest[]>;
     getPullRequest(repoId: string, prId: string): Promise<PullRequest | null>;
+
+    // =========================================================================
+    // bitApp Database Methods
+    // =========================================================================
+    savePublishedApp(app: any): Promise<void>;
+    getPublishedApp(appId: string): Promise<any | null>;
+    getPublishedApps(): Promise<any[]>;
+    deletePublishedApp(appId: string): Promise<void>;
+    saveInstalledApp(app: any): Promise<void>;
+    getInstalledApps(): Promise<any[]>;
+    deleteInstalledApp(appId: string): Promise<void>;
+    saveAppStorageEntry(appId: string, key: string, value: any): Promise<void>;
+    getAppStorageEntry(appId: string, key: string): Promise<any | null>;
+    deleteAppStorageEntry(appId: string, key: string): Promise<void>;
 }

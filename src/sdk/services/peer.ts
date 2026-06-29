@@ -7,6 +7,7 @@ import { VaultService } from './vault.ts';
 import { IPeerService } from './interfaces/IPeerService.ts';
 import { useStore } from '../../store/useStore.ts';
 import { RPCRouter } from './server/router.ts';
+import { AppManager } from './appManager.ts';
 
 export const PeerService: IPeerService = {
     peer: null,
@@ -89,6 +90,7 @@ export const PeerService: IPeerService = {
         if (this.iniciarCLIBridge) {
             this.iniciarCLIBridge();
         }
+        AppManager.iniciarAppMessageBroker();
     },
 
     async validarIdentidadEnRed(idPublico: string, idPrivado: string, passwordHash: string): Promise<boolean | Credentials> {

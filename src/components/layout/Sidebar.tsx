@@ -39,6 +39,18 @@ export const Sidebar: React.FC = () => {
                 >
                     📂 bitDrive
                 </div>
+                <div 
+                    className={`nav-item ${activeApp === 'bitApp' ? 'active' : ''}`} 
+                    onClick={() => setActiveApp('bitApp')}
+                >
+                    🏪 bitApp Store
+                </div>
+                <div 
+                    className={`nav-item ${activeApp === 'bitAppConsole' ? 'active' : ''}`} 
+                    onClick={() => setActiveApp('bitAppConsole')}
+                >
+                    🚀 bitApp Console
+                </div>
             </div>
             <div className="sidebar-footer">
                 <div 

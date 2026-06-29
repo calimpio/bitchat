@@ -10,7 +10,7 @@ export const DB: IDBService = {
 
     init(): Promise<void> {
         return new Promise((resolve, reject) => {
-            const req = indexedDB.open('bitmsg_db', 14);
+            const req = indexedDB.open('bitmsg_db', 15);
             req.onupgradeneeded = (e: IDBVersionChangeEvent) => {
                 const db = (e.target as IDBOpenDBRequest).result;
                 const tx = (e.target as IDBOpenDBRequest).transaction!;
@@ -56,6 +56,17 @@ export const DB: IDBService = {
                 }
                 if (!db.objectStoreNames.contains('drive_pull_requests')) {
                     db.createObjectStore('drive_pull_requests', { keyPath: 'prId' });
+                }
+                
+                // bitApp Object Stores
+                if (!db.objectStoreNames.contains('drive_apps_registry')) {
+                    db.createObjectStore('drive_apps_registry', { keyPath: 'appId' });
+                }
+                if (!db.objectStoreNames.contains('installed_apps')) {
+                    db.createObjectStore('installed_apps', { keyPath: 'appId' });
+                }
+                if (!db.objectStoreNames.contains('app_isolated_storage')) {
+                    db.createObjectStore('app_isolated_storage', { keyPath: 'appId_key' });
                 }
             };
             req.onsuccess = (e: Event) => {
@@ -587,6 +598,110 @@ export const DB: IDBService = {
                 }
             };
             req.onerror = () => resolve(null);
+        });
+    },
+
+    // =========================================================================
+    // bitApp Database Methods
+    // =========================================================================
+    async savePublishedApp(app: any): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('drive_apps_registry', 'readwrite');
+            const store = tx.objectStore('drive_apps_registry');
+            store.put(app).onsuccess = () => resolve();
+        });
+    },
+
+    async getPublishedApp(appId: string): Promise<any | null> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve(null);
+            const tx = this.db.transaction('drive_apps_registry', 'readonly');
+            const store = tx.objectStore('drive_apps_registry');
+            const req = store.get(appId);
+            req.onsuccess = () => resolve(req.result || null);
+            req.onerror = () => resolve(null);
+        });
+    },
+
+    async getPublishedApps(): Promise<any[]> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve([]);
+            const tx = this.db.transaction('drive_apps_registry', 'readonly');
+            const store = tx.objectStore('drive_apps_registry');
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result || []);
+        });
+    },
+
+    async deletePublishedApp(appId: string): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('drive_apps_registry', 'readwrite');
+            const store = tx.objectStore('drive_apps_registry');
+            store.delete(appId).onsuccess = () => resolve();
+        });
+    },
+
+    async saveInstalledApp(app: any): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('installed_apps', 'readwrite');
+            const store = tx.objectStore('installed_apps');
+            store.put(app).onsuccess = () => resolve();
+        });
+    },
+
+    async getInstalledApps(): Promise<any[]> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve([]);
+            const tx = this.db.transaction('installed_apps', 'readonly');
+            const store = tx.objectStore('installed_apps');
+            const req = store.getAll();
+            req.onsuccess = () => resolve(req.result || []);
+        });
+    },
+
+    async deleteInstalledApp(appId: string): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('installed_apps', 'readwrite');
+            const store = tx.objectStore('installed_apps');
+            store.delete(appId).onsuccess = () => resolve();
+        });
+    },
+
+    async saveAppStorageEntry(appId: string, key: string, value: any): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('app_isolated_storage', 'readwrite');
+            const store = tx.objectStore('app_isolated_storage');
+            store.put({
+                appId_key: `${appId}_${key}`,
+                appId,
+                key,
+                value
+            }).onsuccess = () => resolve();
+        });
+    },
+
+    async getAppStorageEntry(appId: string, key: string): Promise<any | null> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve(null);
+            const tx = this.db.transaction('app_isolated_storage', 'readonly');
+            const store = tx.objectStore('app_isolated_storage');
+            const req = store.get(`${appId}_${key}`);
+            req.onsuccess = () => resolve(req.result ? req.result.value : null);
+            req.onerror = () => resolve(null);
+        });
+    },
+
+    async deleteAppStorageEntry(appId: string, key: string): Promise<void> {
+        return new Promise((resolve) => {
+            if (!this.db) return resolve();
+            const tx = this.db.transaction('app_isolated_storage', 'readwrite');
+            const store = tx.objectStore('app_isolated_storage');
+            store.delete(`${appId}_${key}`).onsuccess = () => resolve();
         });
     }
 };

@@ -7,6 +7,8 @@ import { SettingsView } from '../components/views/SettingsView.tsx';
 import { DevicesView } from '../components/views/DevicesView.tsx';
 import { ChatSettingsView } from '../components/views/ChatSettingsView.tsx';
 import { DriveView } from '../components/views/DriveView.tsx';
+import { AppStoreView } from '../components/views/AppStoreView.tsx';
+import { AppConsoleView } from '../components/views/AppConsoleView.tsx';
 import { Modal } from '../components/ui/Modal.tsx';
 import { Input } from '../components/ui/Input.tsx';
 import { Button } from '../components/ui/Button.tsx';
@@ -112,7 +114,9 @@ export const DashboardPage: React.FC = () => {
                     {activeApp === 'bitDevices' && <DevicesView />}
                     {activeApp === 'ChatSettings' && <ChatSettingsView />}
                     {activeApp === 'bitDrive' && <DriveView />}
-                    {activeApp !== 'bitMsg' && activeApp !== 'Settings' && activeApp !== 'bitDevices' && activeApp !== 'ChatSettings' && activeApp !== 'bitDrive' && (
+                    {activeApp === 'bitApp' && <AppStoreView />}
+                    {activeApp === 'bitAppConsole' && <AppConsoleView />}
+                    {activeApp !== 'bitMsg' && activeApp !== 'Settings' && activeApp !== 'bitDevices' && activeApp !== 'ChatSettings' && activeApp !== 'bitDrive' && activeApp !== 'bitApp' && activeApp !== 'bitAppConsole' && (
                         <div style={{ textAlign: 'center', marginTop: '50px', color: 'var(--text-dim)' }}>Próximamente...</div>
                     )}
                 </div>
