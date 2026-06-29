@@ -21,12 +21,14 @@ interface AppStore extends AppStoreState {
     setSessionTimeoutDuration: (duration: number) => void;
     startAbsoluteLockTimer: () => void;
     clearAbsoluteLockTimer: () => void;
+    setDevName: (name: string | null) => void;
 }
 
 interface AppStoreState extends AppState {
     sessionExpiresAt: number | null;
     sessionSecurityMode: 'always_active' | 'absolute_timeout' | 'inactivity_timeout';
-    sessionTimeoutDuration: number; // in minutes
+    sessionTimeoutDuration: number;
+    devName: string | null;
 }
 
 let lockTimer: number | null = null;
@@ -54,6 +56,7 @@ export const useStore = create<AppStore>((set, get) => ({
     sessionExpiresAt: null,
     sessionSecurityMode: savedMode,
     sessionTimeoutDuration: savedDuration,
+    devName: localStorage.getItem('bit_developer_name') || null,
 
     setPantalla: (pantalla) => {
         set({ pantalla });
@@ -84,6 +87,7 @@ export const useStore = create<AppStore>((set, get) => ({
     setMostrarChatMobile: (mostrarChatMobile) => set({ mostrarChatMobile }),
     setHistoriales: (historiales) => set({ historiales }),
     setDevices: (devices) => set({ devices }),
+    setDevName: (devName) => set({ devName }),
 
     lockTerminal: () => {
         console.log('[SECURITY] Sesión expirada. Bloqueando terminal (Purga de RAM).');

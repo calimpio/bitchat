@@ -3,7 +3,7 @@ import { useStore } from '../../store/useStore.ts';
 import { PeerService } from '../../sdk/index.ts';
 
 export const Sidebar: React.FC = () => {
-    const { activeApp, setActiveApp, showSidebar, setShowSidebar, setPantalla, setMasterPassword, setAesKey, setChatConIdPublico } = useStore();
+    const { activeApp, setActiveApp, showSidebar, setShowSidebar, setPantalla, setMasterPassword, setAesKey, setChatConIdPublico, devName } = useStore();
 
     const logout = () => {
         if (PeerService.peer) PeerService.peer.destroy();
@@ -45,12 +45,14 @@ export const Sidebar: React.FC = () => {
                 >
                     🏪 bitApp Store
                 </div>
-                <div 
-                    className={`nav-item ${activeApp === 'bitAppConsole' ? 'active' : ''}`} 
-                    onClick={() => setActiveApp('bitAppConsole')}
-                >
-                    🚀 bitApp Console
-                </div>
+                {devName && (
+                    <div 
+                        className={`nav-item ${activeApp === 'bitAppConsole' ? 'active' : ''}`} 
+                        onClick={() => setActiveApp('bitAppConsole')}
+                    >
+                        🚀 bitApp Console
+                    </div>
+                )}
             </div>
             <div className="sidebar-footer">
                 <div 

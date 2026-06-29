@@ -8,7 +8,7 @@ import { Input } from '../ui/Input.tsx';
 import { Modal } from '../ui/Modal.tsx';
 
 export const DriveView: React.FC = () => {
-    const { me, devices, setDevices } = useStore();
+    const { me, devices, setDevices, devName, setDevName, setActiveApp } = useStore();
     const [repositories, setRepositories] = useState<Repository[]>([]);
     const [activeRepo, setActiveRepo] = useState<Repository | null>(null);
     const [branches, setBranches] = useState<Branch[]>([]);
@@ -829,6 +829,29 @@ export const DriveView: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', maxWidth: '900px', margin: '0 auto' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h2 style={{ color: 'var(--primary)', margin: 0 }}>📂 bitDrive</h2>
+                    {devName ? (
+                        <Button 
+                            variant="ghost" 
+                            className="btn-sm" 
+                            onClick={() => setActiveApp('bitAppConsole')}
+                        >
+                            🚀 Consola de Desarrollador
+                        </Button>
+                    ) : (
+                        <Button 
+                            variant="ghost" 
+                            className="btn-sm" 
+                            onClick={() => {
+                                const name = prompt("Introduce tu nombre de Desarrollador / Organización:");
+                                if (name && name.trim()) {
+                                    localStorage.setItem('bit_developer_name', name.trim());
+                                    setDevName(name.trim());
+                                }
+                            }}
+                        >
+                            👨‍💻 Crear Cuenta de Desarrollador
+                        </Button>
+                    )}
                 </div>
 
                 <p style={{ color: 'var(--text-dim)', fontSize: '14px', textAlign: 'center', margin: '0 0 10px 0' }}>
